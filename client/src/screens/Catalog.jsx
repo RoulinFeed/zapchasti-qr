@@ -1,0 +1,307 @@
+import { useMemo, useState } from 'react';
+import { useStore, record, recordMany, uid } from '../store.js';
+import { itemTotals } from '../../../shared/state.js';
+import { Section, Message, fmtDate, fmtQty, searchItems } from '../ui.jsx';
+
+const FIELDS = [
+  ['name', 'Название*'],
+  ['sku', 'Артикул'],
+  ['manufacturer', 'Производитель'],
+  ['models', 'Модели техники'],
+  ['unitName', 'Ед. изм.'],
+  ['minQty', 'Мин. остаток'],
+  ['note', 'Заметка'],
+];
+
+function ItemForm({ item, onDone }) {
+  const [f, setF] = useState({ tracking: 'piece', unitName: 'шт', minQty: 0, ...item });
+  const [err, setErr] = useState(null);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  async function save() {
+    try {
+      const payload = { ...f, id: f.id || uid(), name: String(f.name || '').trim(), minQty: Number(f.minQty) || 0 };
+      await record('item.upsert', payload);
+      onDone();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+  return (
+    <Section title={item?.id ? 'Позиция' : 'Новая позиция'}>
+      <div className="grid2">
+        {FIELDS.map(([k, label]) => (
+          <label key={k} className="field">
+            {label}
+            <input value={f[k] ?? ''} onChange={set(k)} inputMode={k === 'minQty' ? 'decimal' : undefined} />
+          </label>
+        ))}
+        <label className="field">
+          Учёт
+          <select value={f.tracking} onChange={set('tracking')} disabled={!!item?.id}>
+            <option value="piece">Поштучно (QR на каждую)</option>
+            <option value="batch">Партией (QR на коробку)</option>
+          </select>
+        </label>
+      </div>
+      {item?.id && (
+        <label className="check">
+          <input type="checkbox" checked={!!f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} /> В
+          архиве (не показывать в поиске)
+        </label>
+      )}
+      {err && <Message kind="error">{err}</Message>}
+      <div className="row">
+        <button className="btn primary" disabled={!String(f.name || '').trim()} onClick={save}>
+          Сохранить
+        </button>
+        <button className="btn" onClick={onDone}>
+          Отмена
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+// --- пробная загрузка из Excel ---
+
+function parseTable(text) {
+  const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim());
+  if (!lines.length) return [];
+  const first = lines[0];
+  const sep = first.includes('\t') ? '\t' : first.split(';').length >= first.split(',').length ? ';' : ',';
+  return lines.map((l) => splitLine(l, sep));
+}
+
+function splitLine(line, sep) {
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') (cur += '"'), i++;
+      else if (c === '"') quoted = false;
+      else cur += c;
+    } else if (c === '"' && cur === '') quoted = true;
+    else if (c === sep) out.push(cur.trim()), (cur = '');
+    else cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function guessColumn(headers, field) {
+  const words = {
+    name: ['наимен', 'назван', 'name'],
+    sku: ['артик', 'код', 'каталож', 'sku'],
+    manufacturer: ['произв', 'бренд', 'марка'],
+    models: ['модел', 'техник', 'примен'],
+    unitName: ['ед', 'изм'],
+    minQty: ['мин'],
+    note: ['прим', 'коммент'],
+  }[field];
+  const i = headers.findIndex((h) => words.some((w) => h.toLowerCase().includes(w)));
+  return i >= 0 ? String(i) : '';
+}
+
+function Import({ onDone }) {
+  const { state } = useStore();
+  const [text, setText] = useState('');
+  const [hasHeader, setHasHeader] = useState(true);
+  const [map, setMap] = useState(null);
+  const [tracking, setTracking] = useState('piece');
+  const [msg, setMsg] = useState(null);
+  const rows = useMemo(() => parseTable(text), [text]);
+  const headers = rows[0] || [];
+  const data = hasHeader ? rows.slice(1) : rows;
+  const cols = headers.map((h, i) => (hasHeader ? h || `Столбец ${i + 1}` : `Столбец ${i + 1}`));
+  const mapping = map || Object.fromEntries(FIELDS.map(([k]) => [k, hasHeader ? guessColumn(headers, k) : '']));
+
+  const toItems = () =>
+    data
+      .map((r) => {
+        const it = {};
+        for (const [k] of FIELDS) if (mapping[k] !== '') it[k] = r[Number(mapping[k])] ?? '';
+        it.minQty = Number(String(it.minQty || '0').replace(',', '.')) || 0;
+        return it;
+      })
+      .filter((it) => it.name);
+
+  async function run() {
+    const batch = uid();
+    const bySku = Object.fromEntries(
+      Object.values(state.items)
+        .filter((i) => i.sku)
+        .map((i) => [i.sku.toLowerCase(), i]),
+    );
+    const items = toItems();
+    const ops = items.map((it) => {
+      const existing = it.sku && bySku[String(it.sku).toLowerCase()];
+      return {
+        kind: 'item.upsert',
+        payload: existing
+          ? // У уже существующей позиции обновляем только заполненные поля.
+            { ...Object.fromEntries(Object.entries(it).filter(([, v]) => v !== '' && v !== 0)), id: existing.id }
+          : { tracking, ...it, unitName: it.unitName || 'шт', id: uid(), importBatch: batch, importedAt: new Date().toISOString() },
+      };
+    });
+    await recordMany(ops);
+    setMsg({ kind: 'ok', text: `Загружено позиций: ${ops.length}` });
+    setText('');
+  }
+
+  const readFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setText(String(reader.result));
+    reader.readAsText(file, 'utf-8');
+  };
+
+  const preview = data.length ? toItems().slice(0, 5) : [];
+
+  return (
+    <Section title="Пробная загрузка каталога" actions={<button className="btn ghost small" onClick={onDone}>Закрыть</button>}>
+      <p className="muted small">
+        Скопируйте строки в Excel (вместе с заголовками) и вставьте сюда, или выберите файл CSV. Остатки не загружаются,
+        только названия и артикулы. Загрузку можно потом удалить целиком.
+      </p>
+      <textarea rows={6} value={text} onChange={(e) => (setText(e.target.value), setMap(null))} placeholder="Вставьте сюда из Excel" />
+      <input type="file" accept=".csv,.txt,.tsv" onChange={readFile} />
+      {rows.length > 0 && (
+        <>
+          <label className="check">
+            <input type="checkbox" checked={hasHeader} onChange={(e) => (setHasHeader(e.target.checked), setMap(null))} /> Первая
+            строка — заголовки
+          </label>
+          <div className="grid2">
+            {FIELDS.map(([k, label]) => (
+              <label key={k} className="field">
+                {label}
+                <select value={mapping[k]} onChange={(e) => setMap({ ...mapping, [k]: e.target.value })}>
+                  <option value="">— не загружать —</option>
+                  {cols.map((c, i) => (
+                    <option key={i} value={String(i)}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <label className="field">
+              Учёт для новых позиций
+              <select value={tracking} onChange={(e) => setTracking(e.target.value)}>
+                <option value="piece">Поштучно</option>
+                <option value="batch">Партией</option>
+              </select>
+            </label>
+          </div>
+          <h3>Как это будет выглядеть (первые строки)</h3>
+          <ul className="list">
+            {preview.map((it, i) => (
+              <li key={i} className="pad">
+                <b>{it.name}</b> <span className="muted small">{[it.sku, it.manufacturer, it.models].filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+          {mapping.name === '' && <Message kind="warn">Укажите столбец с названием</Message>}
+          <button className="btn primary" disabled={mapping.name === '' || !preview.length} onClick={run}>
+            Загрузить {toItems().length} позиций
+          </button>
+        </>
+      )}
+      {msg && <Message kind={msg.kind}>{msg.text}</Message>}
+    </Section>
+  );
+}
+
+function ImportBatches() {
+  const { state } = useStore();
+  const batches = {};
+  for (const it of Object.values(state.items)) {
+    if (!it.importBatch || it.archived) continue;
+    (batches[it.importBatch] ||= { at: it.importedAt, items: [] }).items.push(it);
+  }
+  const list = Object.entries(batches);
+  if (!list.length) return null;
+
+  async function remove(items) {
+    const used = new Set(Object.values(state.units).map((u) => u.itemId));
+    const free = items.filter((it) => !used.has(it.id));
+    if (!confirm(`Убрать в архив ${free.length} позиций этой загрузки? Позиции, на которые уже есть этикетки (${items.length - free.length}), останутся.`))
+      return;
+    await recordMany(free.map((it) => ({ kind: 'item.upsert', payload: { ...it, archived: true } })));
+  }
+
+  return (
+    <Section title="Загрузки из Excel">
+      <ul className="list">
+        {list.map(([id, b]) => (
+          <li key={id} className="line">
+            <span className="grow">
+              {fmtDate(b.at)} — {b.items.length} позиций
+            </span>
+            <button className="btn small" onClick={() => remove(b.items)}>
+              Удалить загрузку
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+export default function Catalog({ params, navigate }) {
+  const { state } = useStore();
+  const [q, setQ] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const totals = useMemo(() => itemTotals(state), [state]);
+
+  if (params.id !== undefined) {
+    return <ItemForm item={params.id ? state.items[params.id] : null} onDone={() => navigate('/catalog')} />;
+  }
+  if (importing) return <Import onDone={() => setImporting(false)} />;
+
+  const list = showArchived
+    ? Object.values(state.items).filter((i) => i.archived)
+    : searchItems(state.items, q);
+
+  return (
+    <>
+      <Section
+        title={`Каталог (${Object.values(state.items).filter((i) => !i.archived).length})`}
+        actions={
+          <div className="row">
+            <a className="btn primary small" href="#/catalog?id=">
+              + Позиция
+            </a>
+            <button className="btn small" onClick={() => setImporting(true)}>
+              Загрузить из Excel
+            </button>
+          </div>
+        }
+      >
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск: название, артикул, модель" />
+        <label className="check">
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Показать архив
+        </label>
+        <ul className="list">
+          {list.slice(0, 300).map((it) => (
+            <li key={it.id}>
+              <a className="list-btn" href={`#/catalog?id=${it.id}`}>
+                <b>{it.name}</b>
+                <span className="muted">
+                  {[it.sku, it.tracking === 'batch' ? 'партией' : 'поштучно', `запас ${fmtQty(totals[it.id]?.total || 0, it)}`]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </Section>
+      <ImportBatches />
+    </>
+  );
+}

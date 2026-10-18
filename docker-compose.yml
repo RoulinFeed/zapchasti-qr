@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: zapchasti
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgres://app:${DB_PASSWORD}@db:5432/zapchasti
+      ADMIN_LOGIN: ${ADMIN_LOGIN}
+      ADMIN_NAME: ${ADMIN_NAME}
+      ADMIN_PIN: ${ADMIN_PIN}
+
+  # HTTPS обязателен: без него телефон не даст приложению камеру.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from ${DOMAIN} --to app:3000
+    volumes:
+      - caddy:/data
+
+  # Резервная копия базы каждый день, хранятся последние 30.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      PGPASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      sh -c 'while true; do
+        pg_dump -h db -U app zapchasti | gzip > /backups/zapchasti_$$(date +%F).sql.gz;
+        ls -1t /backups/*.sql.gz | tail -n +31 | xargs -r rm;
+        sleep 86400;
+      done'
+
+volumes:
+  db:
+  caddy:
