@@ -36,7 +36,7 @@ for (const [kind, name] of [
   ['machine', 'Акрос 595 №7'],
 ]) {
   await go('locations?code=');
-  await page.locator('select').first().selectOption(kind);
+  await page.locator('.main select').first().selectOption(kind);
   await page.getByLabel('Название*').fill(name);
   await page.getByRole('button', { name: 'Сохранить' }).click();
   await page.getByText(name).first().waitFor();
@@ -45,7 +45,7 @@ await shot('02-locations');
 
 // Приход поштучной детали без этикетки: сервер выдаёт 2 кода
 await go('receive');
-await page.locator('select').first().selectOption({ label: 'Склад: Основной склад' });
+await page.locator('.main select').first().selectOption({ label: 'Склад: Основной склад' });
 await page.getByRole('button', { name: 'Нет этикетки — выдать новые коды' }).click();
 await page.getByRole('button', { name: '+ Новая позиция' }).click();
 await page.getByLabel('Название*').fill('Подшипник 6205');
@@ -56,9 +56,16 @@ await page.getByRole('button', { name: 'Оприходовать' }).click();
 await page.getByText(/Оприходовано: Подшипник 6205/).waitFor();
 await shot('03-receive');
 
+// Цена закупки в каталоге
+await go('catalog');
+await page.getByText('Подшипник 6205').click();
+await page.getByLabel('Цена закупки, ₽').fill('1 250,50');
+await page.getByRole('button', { name: 'Сохранить' }).click();
+await page.getByText(/запас 2 шт/).waitFor();
+
 // Приход партии болтов по готовой этикетке B-000001 (печатали впрок)
 await go('labels');
-await page.locator('select').filter({ hasText: 'Поштучный' }).selectOption('B');
+await page.locator('.main select').filter({ hasText: 'Поштучный' }).selectOption('B');
 await page.evaluate(() => (window.print = () => {}));
 await page.getByLabel('Сколько штук').fill('1');
 await page.getByRole('button', { name: 'Выдать коды и напечатать' }).click();
@@ -68,7 +75,7 @@ await go('receive');
 await scan('B-000001');
 await page.getByRole('button', { name: '+ Новая позиция' }).click();
 await page.getByLabel('Название*').fill('Болт М10х40');
-await page.locator('select').filter({ hasText: 'Поштучно (QR' }).selectOption('batch');
+await page.locator('.main select').filter({ hasText: 'Поштучно (QR' }).selectOption('batch');
 await page.getByRole('button', { name: 'Создать' }).click();
 await page.getByLabel(/Количество/).fill('100');
 await page.getByRole('button', { name: 'Оприходовать' }).click();
@@ -76,7 +83,7 @@ await page.getByText(/Оприходовано: Болт М10х40, 100 шт/).wa
 
 // Комплектация Газели: подшипник P-000001 и 30 болтов
 await go('move/transfer');
-await page.locator('select').first().selectOption({ label: 'Газель: Газель 1' });
+await page.locator('.main select').first().selectOption({ label: 'Газель: Газель 1' });
 await scan('P-000001');
 await scan('B-000001');
 await page.locator('input.qty').fill('30');
@@ -132,6 +139,37 @@ await page.getByRole('button', { name: 'Закрыть' }).click();
 await page.getByText('Ремень вариатора').waitFor();
 await page.getByRole('button', { name: 'Удалить загрузку' }).click();
 await page.getByText('Ремень вариатора').waitFor({ state: 'detached' });
+
+// Затраты: подшипник поставлен по цене 1250,50
+await go('costs');
+await page.locator('.big-number').first().getByText(/1\s251 ₽/).waitFor();
+await page.getByText('Акрос 595 №7').click();
+await page.getByText(/1 × 1\s251 ₽/).waitFor();
+await shot('08-costs');
+
+// Нестыковка: подшипник стоит на комбайне, а его ещё и «перемещают» в Газель
+await go('move/transfer?unit=P-000001&to=V-001');
+await page.getByText(/По учёту деталь сейчас: Акрос 595/).waitFor();
+await page.getByRole('button', { name: 'Провести' }).click();
+await page.getByText('Проведено: 1').waitFor();
+await go('');
+await page.getByText('Есть нестыковки в учёте: 1').waitFor();
+await go('issues');
+await page.getByText('Поштучная деталь числится в двух местах').waitFor();
+await page.getByText(/числится сразу: (Газель 1, Акрос 595 №7|Акрос 595 №7, Газель 1)/).waitFor();
+await shot('09-issues');
+await page.getByRole('button', { name: 'Разобрались' }).click();
+await page.getByPlaceholder('Что выяснили (необязательно)').fill('ошибся при выдаче');
+await page.getByRole('button', { name: 'Готово' }).click();
+await page.getByText('Нестыковок нет.').waitFor();
+
+// Тёмная тема
+await page.setViewportSize({ width: 1100, height: 800 });
+await page.locator('.side select').selectOption('dark');
+assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+await go('');
+await shot('10-dark');
+await page.setViewportSize({ width: 390, height: 844 });
 
 // Сервер видит всё
 const token = await page.evaluate(

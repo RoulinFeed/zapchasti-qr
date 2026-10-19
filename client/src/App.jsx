@@ -14,6 +14,10 @@ import Labels from './screens/Labels.jsx';
 import Users from './screens/Users.jsx';
 import Data from './screens/Data.jsx';
 import Problems from './screens/Problems.jsx';
+import Issues from './screens/Issues.jsx';
+import Costs from './screens/Costs.jsx';
+import { openIssues } from '../../shared/state.js';
+import { ThemeSwitch } from './theme.jsx';
 
 const ROUTES = {
   '': Home,
@@ -28,6 +32,8 @@ const ROUTES = {
   users: Users,
   data: Data,
   problems: Problems,
+  issues: Issues,
+  costs: Costs,
 };
 
 function parseHash() {
@@ -51,7 +57,7 @@ function SyncBadge() {
 }
 
 export default function App() {
-  const { ready, user, rejected } = useStore();
+  const { ready, user, rejected, state } = useStore();
   const [route, setRoute] = useState(parseHash);
   const [menu, setMenu] = useState(false);
 
@@ -76,6 +82,8 @@ export default function App() {
     ['stock', 'Остатки'],
     manage && ['receive', 'Приход'],
     manage && ['inventory', 'Инвентаризация'],
+    manage && ['issues', `Нестыковки${openIssues(state).length ? ` (${openIssues(state).length})` : ''}`],
+    manage && ['costs', 'Затраты'],
     manage && ['catalog', 'Каталог'],
     manage && ['locations', 'Склады, Газели, техника'],
     manage && ['labels', 'Печать этикеток'],
@@ -103,6 +111,7 @@ export default function App() {
             </a>
           ))}
           <div className="side-user">
+            <ThemeSwitch />
             <div>{user.name}</div>
             <button
               className="btn ghost small"

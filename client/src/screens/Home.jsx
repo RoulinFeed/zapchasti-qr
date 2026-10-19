@@ -1,7 +1,7 @@
 import { useStore, canManage } from '../store.js';
-import { lowStock } from '../../../shared/state.js';
+import { lowStock, openIssues } from '../../../shared/state.js';
 import { ScanField } from '../Scanner.jsx';
-import { Section, fmtDate, moveText, unitLabel, fmtQty } from '../ui.jsx';
+import { Section, Message, fmtDate, moveText, unitLabel, fmtQty } from '../ui.jsx';
 
 export default function Home({ navigate }) {
   const { user, state } = useStore();
@@ -24,6 +24,12 @@ export default function Home({ navigate }) {
         <ScanField onScan={(code) => navigate(`/scan?code=${encodeURIComponent(code)}`)} />
         <p className="muted small">Отсканируйте деталь, ячейку, Газель или комбайн, чтобы увидеть, что это и где лежит.</p>
       </Section>
+
+      {manage && openIssues(state).length > 0 && (
+        <Message kind="warn">
+          Есть нестыковки в учёте: {openIssues(state).length}. <a href="#/issues">Разобраться</a>
+        </Message>
+      )}
 
       <div className="tiles">
         {actions.map(([path, title, sub]) => (

@@ -1,5 +1,5 @@
 import { useStore } from '../store.js';
-import { itemTotals, MOVE_TYPES, LOCATION_KINDS, CONDITIONS } from '../../../shared/state.js';
+import { itemTotals, installCosts, MOVE_TYPES, LOCATION_KINDS, CONDITIONS } from '../../../shared/state.js';
 import { Section, fmtDate, locLabel } from '../ui.jsx';
 
 // CSV с разделителем «;» и BOM: русский Excel открывает такой файл двойным щелчком без настройки.
@@ -50,9 +50,9 @@ export default function Data() {
           .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
           .map((i) => {
             const t = totals[i.id];
-            return [i.name, i.sku, i.manufacturer, i.models, i.tracking === 'batch' ? 'партией' : 'поштучно', t.byKind.warehouse || 0, (t.byKind.van || 0) + (t.byKind.person || 0), t.total, i.unitName, i.minQty];
+            return [i.name, i.sku, i.manufacturer, i.models, i.tracking === 'batch' ? 'партией' : 'поштучно', t.byKind.warehouse || 0, (t.byKind.van || 0) + (t.byKind.person || 0), t.total, i.unitName, i.minQty, Number(i.price) || 0, (Number(i.price) || 0) * t.total];
           });
-        downloadCsv('позиции', ['Позиция', 'Артикул', 'Производитель', 'Модели', 'Учёт', 'На складах', 'В Газелях и у людей', 'Всего', 'Ед.', 'Мин. остаток'], rows);
+        downloadCsv('позиции', ['Позиция', 'Артикул', 'Производитель', 'Модели', 'Учёт', 'На складах', 'В Газелях и у людей', 'Всего', 'Ед.', 'Мин. остаток', 'Цена, ₽', 'Стоимость запаса, ₽'], rows);
       },
     ],
     [
@@ -82,6 +82,16 @@ export default function Data() {
           })
           .sort((a, b) => a[0].localeCompare(b[0], 'ru'));
         downloadCsv('техника', ['Техника', 'Дата', 'Действие', 'Позиция', 'Артикул', 'Код', 'Кол-во', 'Моточасы', 'Кто', 'Состояние'], rows);
+      },
+    ],
+    [
+      'Затраты на технику',
+      'Все установки с ценой: техника, деталь, сумма, механик',
+      () => {
+        const rows = installCosts(state).byMachine.flatMap((mc) =>
+          mc.moves.map((m) => [locLabel(state, mc.code), fmtDate(m.createdAt), state.items[state.units[m.unit]?.itemId]?.name, m.unit, m.qty, m.price, m.sum, m.userName]),
+        );
+        downloadCsv('затраты', ['Техника', 'Дата', 'Позиция', 'Код', 'Кол-во', 'Цена, ₽', 'Сумма, ₽', 'Кто'], rows);
       },
     ],
   ];

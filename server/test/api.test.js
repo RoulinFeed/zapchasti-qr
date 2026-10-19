@@ -127,3 +127,42 @@ test('неверные операции отклоняются с понятно
   assert.deepEqual(res.results.map((r) => r.status), ['rejected', 'rejected']);
   assert.match(res.results[0].error, /количество/);
 });
+
+test('нестыковки и затраты считаются из журнала', async () => {
+  const { buildState: build, openIssues, installCosts, stockValue } = await import('../../shared/state.js');
+  let seq = 0;
+  const o = (kind, payload, userName = 'Иван') => ({ ...op(kind, payload), seq: ++seq, userName });
+  const ops = [
+    o('item.upsert', { id: 'a', name: 'Ремень', tracking: 'piece', price: 12000 }),
+    o('item.upsert', { id: 'b', name: 'Болт', tracking: 'batch', price: 10 }),
+    o('location.upsert', { code: 'W-1', kind: 'warehouse', name: 'Склад' }),
+    o('location.upsert', { code: 'V-1', kind: 'van', name: 'Газель 1' }),
+    o('location.upsert', { code: 'V-2', kind: 'van', name: 'Газель 2' }),
+    o('location.upsert', { code: 'M-1', kind: 'machine', name: 'Лексион 7' }),
+    o('unit.bind', { code: 'P-1', itemId: 'a' }),
+    o('unit.bind', { code: 'B-1', itemId: 'b' }),
+    o('move', { type: 'receipt', unit: 'P-1', qty: 1, to: 'W-1' }),
+    o('move', { type: 'receipt', unit: 'B-1', qty: 100, to: 'W-1' }),
+    o('move', { type: 'transfer', unit: 'P-1', qty: 1, from: 'W-1', to: 'V-1' }),
+    // без связи: оба механика «берут» один ремень, и болтов берут больше, чем есть
+    o('move', { type: 'install', unit: 'P-1', qty: 1, from: 'V-1', to: 'M-1', price: 11500 }),
+    o('move', { type: 'transfer', unit: 'P-1', qty: 1, from: 'V-1', to: 'V-2' }, 'Пётр'),
+    o('move', { type: 'transfer', unit: 'B-1', qty: 150, from: 'W-1', to: 'V-2' }, 'Пётр'),
+    o('move', { type: 'install', unit: 'B-1', qty: 8, from: 'V-2', to: 'M-1' }, 'Пётр'),
+  ];
+  const state = build(ops);
+  const kinds = openIssues(state).map((i) => `${i.unit}:${i.kind}`);
+  assert.deepEqual(kinds, ['P-1:short', 'P-1:twice', 'B-1:short']);
+
+  const costs = installCosts(state);
+  // ремень по зафиксированной цене 11500, болты по каталогу 8 × 10
+  assert.equal(costs.total, 11580);
+  assert.equal(costs.byMachine[0].count, 2);
+  assert.deepEqual(costs.byPerson.map((p) => [p.name, p.sum]), [['Иван', 11500], ['Пётр', 80]]);
+  // запас: в Газели 2 ремень (числится по ошибке) и 142 болта
+  assert.equal(stockValue(state).byKind.van, 12000 + 142 * 10);
+
+  const resolved = build([...ops, o('issue.resolve', { moveId: openIssues(state)[0].moveId, note: 'ремень на комбайне' })]);
+  // разбор относится ко всей операции, поэтому уходят оба замечания по ремню
+  assert.deepEqual(openIssues(resolved).map((i) => i.unit), ['B-1']);
+});

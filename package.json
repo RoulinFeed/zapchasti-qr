@@ -1,6 +1,7 @@
 {
   "name": "zapchasti-qr",
   "private": true,
+  "type": "module",
   "scripts": {
     "install:all": "cd server && npm ci && cd ../client && npm ci",
     "build": "cd client && npm run build",

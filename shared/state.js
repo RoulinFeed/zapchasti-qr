@@ -1,7 +1,7 @@
 // Общая логика сервера и приложения: состояние склада собирается из журнала операций.
 // Операции только добавляются, поэтому одинаковый журнал всегда даёт одинаковое состояние.
 
-export const OP_KINDS = ['item.upsert', 'location.upsert', 'unit.bind', 'move'];
+export const OP_KINDS = ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'];
 
 export const MOVE_TYPES = {
   receipt: 'Приход',
@@ -42,6 +42,8 @@ export function emptyState() {
     units: {}, // code -> { code, itemId, serial, note, condition }
     stock: {}, // unitCode -> { locationCode -> qty }
     moves: [], // операции перемещения по порядку
+    issues: [], // нестыковки, найденные при разборе журнала
+    resolved: {}, // moveId -> { note, userName, createdAt } для разобранных нестыковок
   };
 }
 
@@ -75,8 +77,12 @@ export function validateOp(op) {
       if (!Number.isFinite(qty) || qty <= 0) return 'количество должно быть больше нуля';
       if (!p.from && !p.to) return 'нужно указать откуда или куда';
       if (p.condition && !CONDITIONS[p.condition]) return 'неизвестное состояние';
+      if (p.price != null && !(Number(p.price) >= 0)) return 'цена не может быть отрицательной';
       return null;
     }
+    case 'issue.resolve':
+      if (!p.moveId) return 'не указана операция';
+      return null;
   }
   return null;
 }
@@ -123,9 +129,13 @@ export function applyOp(state, op) {
       const qty = Number(p.qty);
       const from = p.from ? normalizeCode(p.from) : null;
       const to = p.to ? normalizeCode(p.to) : null;
+      const issues = findIssues(state, { unit, qty, from, to, type: p.type });
       addStock(state, unit, from, -qty);
       addStock(state, unit, to, qty);
       if (p.condition && state.units[unit]) state.units[unit].condition = p.condition;
+      for (const kind of issues) {
+        state.issues.push({ moveId: op.id, kind, unit, from, to, qty, type: p.type, createdAt: op.createdAt, userName: op.userName });
+      }
       state.moves.push({
         id: op.id,
         seq: op.seq,
@@ -140,8 +150,42 @@ export function applyOp(state, op) {
       });
       break;
     }
+    case 'issue.resolve':
+      state.resolved[p.moveId] = { note: p.note || '', userName: op.userName, createdAt: op.createdAt };
+      break;
   }
   return state;
+}
+
+export const ISSUE_KINDS = {
+  short: 'Взяли больше, чем было по учёту',
+  twice: 'Поштучная деталь числится в двух местах',
+  nosource: 'Неизвестно, откуда взяли',
+};
+
+// Проверка движения до его применения. Такое бывает, когда люди работают без связи
+// и узнают о действиях друг друга только при синхронизации.
+function findIssues(state, { unit, qty, from, to, type }) {
+  const res = [];
+  const row = state.stock[unit] || {};
+  const tracking = state.items[state.units[unit]?.itemId]?.tracking;
+  if (from && (row[from] || 0) + 1e-9 < qty) res.push('short');
+  if (!from && to && type !== 'receipt' && type !== 'adjust') {
+    const elsewhere = Object.entries(row).some(([loc, q]) => loc !== to && q > 0);
+    if (tracking !== 'piece' || !elsewhere) res.push('nosource');
+  }
+  if (tracking === 'piece' && to) {
+    const after = { ...row };
+    if (from) after[from] = (after[from] || 0) - qty;
+    after[to] = (after[to] || 0) + qty;
+    const places = Object.values(after).filter((q) => q > 1e-9);
+    if (places.length > 1 || places.some((q) => q > 1 + 1e-9)) res.push('twice');
+  }
+  return res;
+}
+
+export function openIssues(state) {
+  return state.issues.filter((i) => !state.resolved[i.moveId]);
 }
 
 export function buildState(ops) {
@@ -230,4 +274,56 @@ export function inventoryDiff(state, locCode, found) {
     if (exp !== fnd) rows.push({ unit, expected: exp, found: fnd, delta: fnd - exp });
   }
   return rows;
+}
+
+// Цена единицы в движении: зафиксированная в момент операции, иначе текущая из каталога.
+export function movePrice(state, m) {
+  if (m.price != null) return Number(m.price);
+  const it = state.items[state.units[m.unit]?.itemId];
+  return Number(it?.price) || 0;
+}
+
+// Затраты за период: что поставили на технику (сумма по цене) в разрезе техники и механиков.
+export function installCosts(state, { from, to } = {}) {
+  const machines = {};
+  const people = {};
+  let total = 0;
+  let unpriced = 0;
+  for (const m of state.moves) {
+    if (m.type !== 'install') continue;
+    if (from && m.createdAt < from) continue;
+    if (to && m.createdAt > to) continue;
+    const price = movePrice(state, m);
+    if (!price) unpriced++;
+    const sum = price * m.qty;
+    total += sum;
+    const mc = (machines[m.to] ||= { code: m.to, sum: 0, count: 0, moves: [] });
+    mc.sum += sum;
+    mc.count += 1;
+    mc.moves.push({ ...m, price, sum });
+    const key = m.userName || '—';
+    const pc = (people[key] ||= { name: key, sum: 0, count: 0 });
+    pc.sum += sum;
+    pc.count += 1;
+  }
+  const byMachine = Object.values(machines).sort((a, b) => b.sum - a.sum);
+  const byPerson = Object.values(people).sort((a, b) => b.sum - a.sum);
+  return { total, unpriced, byMachine, byPerson };
+}
+
+// Стоимость запаса по видам мест (склады, Газели, сотрудники). Установленное на технику не входит.
+export function stockValue(state) {
+  const byKind = {};
+  let total = 0;
+  for (const [unit, row] of Object.entries(state.stock)) {
+    const price = Number(state.items[state.units[unit]?.itemId]?.price) || 0;
+    if (!price) continue;
+    for (const [loc, qty] of Object.entries(row)) {
+      const kind = state.locations[loc]?.kind;
+      if (qty <= 0 || kind === 'machine') continue;
+      byKind[kind] = (byKind[kind] || 0) + qty * price;
+      total += qty * price;
+    }
+  }
+  return { total, byKind };
 }

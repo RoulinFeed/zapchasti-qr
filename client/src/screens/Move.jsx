@@ -120,6 +120,8 @@ export default function Move({ args, params }) {
         from: l.from,
         to: cfg.destKinds ? dest : null,
         ...(type === 'install' && hours ? { hours: Number(hours) } : {}),
+        // Цену фиксируем в момент установки, чтобы затраты не менялись при смене цен в каталоге.
+        ...(type === 'install' && Number(l.item?.price) > 0 ? { price: Number(l.item.price) } : {}),
         ...(type === 'remove' ? { condition } : {}),
         ...(comment.trim() ? { comment: comment.trim() } : {}),
       },

@@ -5,7 +5,10 @@
   --muted: #69736d;
   --line: #dfe4df;
   --primary: #1f6f43;
+  --primary-btn: #1f6f43;
   --primary-text: #ffffff;
+  --field: #ffffff;
+  --overlay-shadow: rgb(0 0 0 / 0.15);
   --warn: #a35a00;
   --warn-bg: #fff4e0;
   --error: #b42318;
@@ -17,6 +20,51 @@
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
+  color-scheme: light;
+}
+
+/* Мягкая тёмная тема: графит, а не чёрный, чтобы не резало глаза и читалось на солнце в кабине. */
+:root[data-theme='dark'] {
+  --bg: #23272a;
+  --card: #2d3236;
+  --text: #e4e8e5;
+  --muted: #a2aba6;
+  --line: #3e4549;
+  --primary: #72c99a;
+  --primary-btn: #2f8a5a;
+  --primary-text: #ffffff;
+  --field: #343a3e;
+  --warn: #f0b860;
+  --warn-bg: #3d3424;
+  --error: #f19c92;
+  --error-bg: #432d2b;
+  --ok: #7fd3a5;
+  --ok-bg: #263c30;
+  --info-bg: #2a3540;
+  --overlay-shadow: rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #23272a;
+    --card: #2d3236;
+    --text: #e4e8e5;
+    --muted: #a2aba6;
+    --line: #3e4549;
+    --primary: #72c99a;
+    --primary-btn: #2f8a5a;
+    --primary-text: #ffffff;
+    --field: #343a3e;
+    --warn: #f0b860;
+    --warn-bg: #3d3424;
+    --error: #f19c92;
+    --error-bg: #432d2b;
+    --ok: #7fd3a5;
+    --ok-bg: #263c30;
+    --info-bg: #2a3540;
+    --overlay-shadow: rgb(0 0 0 / 0.4);
+    color-scheme: dark;
+  }
 }
 
 * {
@@ -55,7 +103,7 @@ textarea {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--field);
   color: var(--text);
   min-height: 44px;
 }
@@ -78,7 +126,7 @@ textarea:focus {
   padding: 8px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--field);
   color: var(--text);
   font: inherit;
   text-decoration: none;
@@ -90,8 +138,8 @@ textarea:focus {
   cursor: default;
 }
 .btn.primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--primary-btn);
+  border-color: var(--primary-btn);
   color: var(--primary-text);
 }
 .btn.ghost {
@@ -224,7 +272,7 @@ textarea:focus {
   bottom: 0;
   z-index: 20;
   background: var(--card);
-  box-shadow: 4px 0 20px rgb(0 0 0 / 0.15);
+  box-shadow: 4px 0 20px var(--overlay-shadow);
   overflow-y: auto;
 }
 .side a {
@@ -560,4 +608,20 @@ textarea:focus {
     max-height: 4.6em;
     overflow: hidden;
   }
+}
+
+.big-number {
+  font-size: 30px;
+  font-weight: 700;
+  margin: 8px 0 4px;
+}
+.row-btn {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.list.sub {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  margin-bottom: 8px;
 }

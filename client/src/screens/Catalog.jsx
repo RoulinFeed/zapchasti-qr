@@ -10,8 +10,12 @@ const FIELDS = [
   ['models', 'Модели техники'],
   ['unitName', 'Ед. изм.'],
   ['minQty', 'Мин. остаток'],
+  ['price', 'Цена закупки, ₽'],
   ['note', 'Заметка'],
 ];
+
+const NUMERIC = ['minQty', 'price'];
+const toNum = (v) => Number(String(v ?? '').replace(/\s/g, '').replace(',', '.')) || 0;
 
 function ItemForm({ item, onDone }) {
   const [f, setF] = useState({ tracking: 'piece', unitName: 'шт', minQty: 0, ...item });
@@ -19,7 +23,7 @@ function ItemForm({ item, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   async function save() {
     try {
-      const payload = { ...f, id: f.id || uid(), name: String(f.name || '').trim(), minQty: Number(f.minQty) || 0 };
+      const payload = { ...f, id: f.id || uid(), name: String(f.name || '').trim(), minQty: toNum(f.minQty), price: toNum(f.price) };
       await record('item.upsert', payload);
       onDone();
     } catch (e) {
@@ -32,7 +36,7 @@ function ItemForm({ item, onDone }) {
         {FIELDS.map(([k, label]) => (
           <label key={k} className="field">
             {label}
-            <input value={f[k] ?? ''} onChange={set(k)} inputMode={k === 'minQty' ? 'decimal' : undefined} />
+            <input value={f[k] ?? ''} onChange={set(k)} inputMode={NUMERIC.includes(k) ? 'decimal' : undefined} />
           </label>
         ))}
         <label className="field">
@@ -98,6 +102,7 @@ function guessColumn(headers, field) {
     models: ['модел', 'техник', 'примен'],
     unitName: ['ед', 'изм'],
     minQty: ['мин'],
+    price: ['цен', 'стоим'],
     note: ['прим', 'коммент'],
   }[field];
   const i = headers.findIndex((h) => words.some((w) => h.toLowerCase().includes(w)));
@@ -122,7 +127,7 @@ function Import({ onDone }) {
       .map((r) => {
         const it = {};
         for (const [k] of FIELDS) if (mapping[k] !== '') it[k] = r[Number(mapping[k])] ?? '';
-        it.minQty = Number(String(it.minQty || '0').replace(',', '.')) || 0;
+        for (const k of NUMERIC) if (k in it) it[k] = toNum(it[k]);
         return it;
       })
       .filter((it) => it.name);
