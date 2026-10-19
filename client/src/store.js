@@ -165,6 +165,10 @@ async function doSync() {
     const now = new Date().toISOString();
     await setMeta('lastSync', now);
     try {
+      // Роль могли поменять, пока человек был в системе: берём её с сервера, а не с момента входа.
+      const { user } = await api('/api/me');
+      await setMeta('user', user);
+      set({ user });
       const { users } = await api('/api/users');
       await setMeta('users', users);
       set({ users });
