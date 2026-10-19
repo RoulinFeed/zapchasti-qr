@@ -18,6 +18,8 @@ services:
       ADMIN_LOGIN: ${ADMIN_LOGIN}
       ADMIN_NAME: ${ADMIN_NAME}
       ADMIN_PIN: ${ADMIN_PIN}
+    volumes:
+      - ./data/photos:/app/data/photos
 
   # HTTPS обязателен: без него телефон не даст приложению камеру.
   caddy:
@@ -38,10 +40,13 @@ services:
       PGPASSWORD: ${DB_PASSWORD}
     volumes:
       - ./backups:/backups
+      - ./data/photos:/photos:ro
     entrypoint: >
       sh -c 'while true; do
         pg_dump -h db -U app zapchasti | gzip > /backups/zapchasti_$$(date +%F).sql.gz;
-        ls -1t /backups/*.sql.gz | tail -n +31 | xargs -r rm;
+        tar czf /backups/photos_$$(date +%F).tar.gz -C /photos .;
+        ls -1t /backups/zapchasti_*.sql.gz | tail -n +31 | xargs -r rm;
+        ls -1t /backups/photos_*.tar.gz | tail -n +8 | xargs -r rm;
         sleep 86400;
       done'
 

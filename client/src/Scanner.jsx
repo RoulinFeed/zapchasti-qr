@@ -43,15 +43,18 @@ export function CameraScanner({ onScan, onClose, continuous = false, hint }) {
         onScanRef.current(code);
         if (!continuous) onClose();
       },
-      { preferredCamera: 'environment', highlightScanRegion: true, returnDetailedScanResult: true, maxScansPerSecond: 8 },
+      {
+        preferredCamera: 'environment',
+        highlightScanRegion: true,
+        returnDetailedScanResult: true,
+        maxScansPerSecond: 8,
+      },
     );
     scannerRef.current = scanner;
     scanner
       .start()
       .then(() => scanner.hasFlash().then(setHasFlash))
-      .catch(() =>
-        setError('Нет доступа к камере. Разрешите доступ в настройках браузера или введите код вручную.'),
-      );
+      .catch(() => setError('Нет доступа к камере. Разрешите доступ в настройках браузера или введите код вручную.'));
     return () => {
       scanner.stop();
       scanner.destroy();
@@ -112,9 +115,7 @@ export function ScanField({ onScan, placeholder = 'Код с этикетки', 
           OK
         </button>
       </form>
-      {camera && (
-        <CameraScanner onScan={onScan} onClose={() => setCamera(false)} continuous={continuous} hint={hint} />
-      )}
+      {camera && <CameraScanner onScan={onScan} onClose={() => setCamera(false)} continuous={continuous} hint={hint} />}
     </>
   );
 }

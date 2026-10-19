@@ -3,3 +3,4 @@ client/dist/
 dev-dist/
 .env
 backups/
+data/

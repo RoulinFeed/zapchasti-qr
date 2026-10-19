@@ -1,10 +1,23 @@
 import { useState } from 'react';
+import { MoveList } from '../MoveList.jsx';
+import { Photo, Thumb } from '../photo.jsx';
 import { useStore, canManage, isOwner, recordMany } from '../store.js';
 import { locationContents, movesFor, unitLocations, normalizeCode } from '../../../shared/state.js';
 import { ScanField } from '../Scanner.jsx';
-import { Section, Message, LocationSelect, fmtDate, fmtQty, kindName, locLabel, moveText, unitLabel, CONDITIONS } from '../ui.jsx';
+import {
+  Section,
+  Message,
+  LocationSelect,
+  fmtDate,
+  fmtQty,
+  kindName,
+  locLabel,
+  moveText,
+  unitLabel,
+  CONDITIONS,
+} from '../ui.jsx';
 
-// Исправление проведённой операции (только для главного): старая отменяется, вместо неё записывается новая.
+// Исправление проведённой операции (только для администратора): старая отменяется, вместо неё записывается новая.
 function MoveEditor({ m, onClose }) {
   const [qty, setQty] = useState(String(m.qty));
   const [from, setFrom] = useState(m.from);
@@ -51,7 +64,11 @@ function MoveEditor({ m, onClose }) {
       </label>
       {err && <Message kind="error">{err}</Message>}
       <div className="row wrap">
-        <button className="btn primary small" disabled={!reason.trim() || !changed || !(n > 0) || (!from && !to)} onClick={() => save(false)}>
+        <button
+          className="btn primary small"
+          disabled={!reason.trim() || !changed || !(n > 0) || (!from && !to)}
+          onClick={() => save(false)}
+        >
           Сохранить исправление
         </button>
         <button className="btn small" disabled={!reason.trim()} onClick={() => save(true)}>
@@ -66,44 +83,25 @@ function MoveEditor({ m, onClose }) {
   );
 }
 
-function History({ moves, state, showUnit }) {
+function History({ moves, state }) {
   const owner = useStore((s) => isOwner(s.user));
   const [editing, setEditing] = useState(null);
-  if (!moves.length) return <p className="muted">Движений нет.</p>;
   return (
-    <ul className="list">
-      {[...moves].reverse().map((m) => (
-        <li key={m.id} className={`pad ${m.voided ? 'voided' : ''}`}>
-          {showUnit && (
-            <div>
-              <a href={`#/scan?code=${m.unit}`}>{unitLabel(state, m.unit)}</a> <span className="muted small">{m.unit}</span>
-            </div>
-          )}
-          <div>
-            {moveText(state, m)} <b>{m.qty}</b>
-          </div>
-          <div className="muted small">
-            {fmtDate(m.createdAt)} · {m.userName || ''}
-            {m.hours ? ` · моточасы ${m.hours}` : ''}
-            {m.condition ? ` · ${CONDITIONS[m.condition]}` : ''}
-            {m.comment ? ` · ${m.comment}` : ''}
-            {m.seq == null && ' · не отправлено'}
-            {m.corrects && ' · исправленная запись'}
-          </div>
-          {m.voided && (
-            <div className="warn-text small no-strike">
-              Отменено: {m.voided.reason} · {m.voided.userName} · {fmtDate(m.voided.createdAt)}
-            </div>
-          )}
-          {owner && !m.voided && editing !== m.id && (
+    <MoveList
+      state={state}
+      moves={moves}
+      renderExtra={(m) =>
+        owner && !m.voided ? (
+          editing === m.id ? (
+            <MoveEditor m={m} onClose={() => setEditing(null)} />
+          ) : (
             <button className="btn ghost small" onClick={() => setEditing(m.id)}>
               Исправить
             </button>
-          )}
-          {editing === m.id && <MoveEditor m={m} onClose={() => setEditing(null)} />}
-        </li>
-      ))}
-    </ul>
+          )
+        ) : null
+      }
+    />
   );
 }
 
@@ -115,6 +113,7 @@ function UnitView({ code, state, manage }) {
   return (
     <>
       <Section title={item?.name || 'Неизвестная позиция'}>
+        <Photo id={item?.photo} />
         <div className="kv">
           <span>Код</span>
           <b>{code}</b>
@@ -237,16 +236,22 @@ function LocationView({ code, state, manage }) {
         {contents.length === 0 && <p className="muted">Пусто.</p>}
         <ul className="list">
           {contents.map((r) => (
-            <li key={r.unit} className="pad">
-              <a href={`#/scan?code=${r.unit}`}>{r.item?.name || r.unit}</a>{' '}
-              <span className="muted small">{r.unit}</span> — {fmtQty(r.qty, r.item)}
-              {r.condition && r.condition !== 'ok' && <span className="warn-text"> · {CONDITIONS[r.condition]}</span>}
+            <li key={r.unit} className="line">
+              <Thumb id={r.item?.photo} />
+              <span className="grow">
+                <a href={`#/scan?code=${r.unit}`}>{r.item?.name || r.unit}</a>{' '}
+                <span className="muted small">{r.unit}</span>
+                {r.condition && r.condition !== 'ok' && (
+                  <span className="warn-text small"> · {CONDITIONS[r.condition]}</span>
+                )}
+              </span>
+              <b>{fmtQty(r.qty, r.item)}</b>
             </li>
           ))}
         </ul>
       </Section>
       <Section title={isMachine ? 'Паспорт: что ставили и снимали' : 'История'}>
-        <History moves={movesFor(state, { location: code })} state={state} showUnit />
+        <History moves={movesFor(state, { location: code })} state={state} />
       </Section>
     </>
   );
@@ -264,7 +269,11 @@ export default function Lookup({ params, navigate }) {
       body = (
         <Message kind="warn">
           Этикетка {code} ещё не привязана к запчасти.{' '}
-          {manage ? <a href={`#/receive?code=${code}`}>Оприходовать с этой этикеткой</a> : 'Передайте деталь на склад для оприходования.'}
+          {manage ? (
+            <a href={`#/receive?code=${code}`}>Оприходовать с этой этикеткой</a>
+          ) : (
+            'Передайте деталь на склад для оприходования.'
+          )}
         </Message>
       );
     else body = <Message kind="error">Код {code} не найден. Если связи давно не было, синхронизируйте данные.</Message>;

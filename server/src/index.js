@@ -14,6 +14,7 @@ if (await ensureAdmin(pool, { login: process.env.ADMIN_LOGIN, name: process.env.
 const app = buildApp({
   pool,
   staticDir: process.env.STATIC_DIR || path.resolve(here, '../../client/dist'),
+  photoDir: process.env.PHOTO_DIR || path.resolve(here, '../../data/photos'),
   logger: true,
 });
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT) || 3000 });

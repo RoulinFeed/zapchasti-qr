@@ -33,11 +33,25 @@ export default function Data() {
           for (const [loc, qty] of Object.entries(row)) {
             if (qty <= 0) continue;
             const l = state.locations[loc];
-            rows.push([LOCATION_KINDS[l?.kind] || '', locLabel(state, loc), it?.name, it?.sku, unit, u?.serial, qty, it?.unitName, CONDITIONS[u?.condition]]);
+            rows.push([
+              LOCATION_KINDS[l?.kind] || '',
+              locLabel(state, loc),
+              it?.name,
+              it?.sku,
+              unit,
+              u?.serial,
+              qty,
+              it?.unitName,
+              CONDITIONS[u?.condition],
+            ]);
           }
         }
         rows.sort((a, b) => (a[0] + a[1] + a[2]).localeCompare(b[0] + b[1] + b[2], 'ru'));
-        downloadCsv('остатки', ['Вид места', 'Место', 'Позиция', 'Артикул', 'Код', 'Серийный №', 'Кол-во', 'Ед.', 'Состояние'], rows);
+        downloadCsv(
+          'остатки',
+          ['Вид места', 'Место', 'Позиция', 'Артикул', 'Код', 'Серийный №', 'Кол-во', 'Ед.', 'Состояние'],
+          rows,
+        );
       },
     ],
     [
@@ -50,9 +64,39 @@ export default function Data() {
           .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
           .map((i) => {
             const t = totals[i.id];
-            return [i.name, i.sku, i.manufacturer, i.models, i.tracking === 'batch' ? 'партией' : 'поштучно', t.byKind.warehouse || 0, (t.byKind.van || 0) + (t.byKind.person || 0), t.total, i.unitName, i.minQty, Number(i.price) || 0, (Number(i.price) || 0) * t.total];
+            return [
+              i.name,
+              i.sku,
+              i.manufacturer,
+              i.models,
+              i.tracking === 'batch' ? 'партией' : 'поштучно',
+              t.byKind.warehouse || 0,
+              (t.byKind.van || 0) + (t.byKind.person || 0),
+              t.total,
+              i.unitName,
+              i.minQty,
+              Number(i.price) || 0,
+              (Number(i.price) || 0) * t.total,
+            ];
           });
-        downloadCsv('позиции', ['Позиция', 'Артикул', 'Производитель', 'Модели', 'Учёт', 'На складах', 'В Газелях и у людей', 'Всего', 'Ед.', 'Мин. остаток', 'Цена, ₽', 'Стоимость запаса, ₽'], rows);
+        downloadCsv(
+          'позиции',
+          [
+            'Позиция',
+            'Артикул',
+            'Производитель',
+            'Модели',
+            'Учёт',
+            'На складах',
+            'В Газелях и у людей',
+            'Всего',
+            'Ед.',
+            'Мин. остаток',
+            'Цена, ₽',
+            'Стоимость запаса, ₽',
+          ],
+          rows,
+        );
       },
     ],
     [
@@ -62,26 +106,77 @@ export default function Data() {
         const rows = state.moves.map((m) => {
           const u = state.units[m.unit];
           const it = u && state.items[u.itemId];
-          return [fmtDate(m.createdAt), MOVE_TYPES[m.type], it?.name, it?.sku, m.unit, m.qty, locLabel(state, m.from), locLabel(state, m.to), m.userName, m.hours, CONDITIONS[m.condition], m.comment, m.voided ? `${m.voided.reason} (${m.voided.userName})` : ''];
+          return [
+            fmtDate(m.createdAt),
+            MOVE_TYPES[m.type],
+            it?.name,
+            it?.sku,
+            m.unit,
+            m.qty,
+            locLabel(state, m.from),
+            locLabel(state, m.to),
+            m.userName,
+            m.hours,
+            CONDITIONS[m.condition],
+            m.comment,
+            m.voided ? `${m.voided.reason} (${m.voided.userName})` : '',
+          ];
         });
-        downloadCsv('движения', ['Дата', 'Операция', 'Позиция', 'Артикул', 'Код', 'Кол-во', 'Откуда', 'Куда', 'Кто', 'Моточасы', 'Состояние', 'Комментарий', 'Отменено'], rows);
+        downloadCsv(
+          'движения',
+          [
+            'Дата',
+            'Операция',
+            'Позиция',
+            'Артикул',
+            'Код',
+            'Кол-во',
+            'Откуда',
+            'Куда',
+            'Кто',
+            'Моточасы',
+            'Состояние',
+            'Комментарий',
+            'Отменено',
+          ],
+          rows,
+        );
       },
     ],
     [
       'Паспорта техники',
       'Что ставили и снимали на каждой единице техники',
       () => {
-        const machines = new Set(Object.values(state.locations).filter((l) => l.kind === 'machine').map((l) => l.code));
+        const machines = new Set(
+          Object.values(state.locations)
+            .filter((l) => l.kind === 'machine')
+            .map((l) => l.code),
+        );
         const rows = state.moves
           .filter((m) => !m.voided && (machines.has(m.to) || machines.has(m.from)))
           .map((m) => {
             const machine = machines.has(m.to) ? m.to : m.from;
             const u = state.units[m.unit];
             const it = u && state.items[u.itemId];
-            return [locLabel(state, machine), fmtDate(m.createdAt), machines.has(m.to) ? 'Установлено' : 'Снято', it?.name, it?.sku, m.unit, m.qty, m.hours, m.userName, CONDITIONS[m.condition]];
+            return [
+              locLabel(state, machine),
+              fmtDate(m.createdAt),
+              machines.has(m.to) ? 'Установлено' : 'Снято',
+              it?.name,
+              it?.sku,
+              m.unit,
+              m.qty,
+              m.hours,
+              m.userName,
+              CONDITIONS[m.condition],
+            ];
           })
           .sort((a, b) => a[0].localeCompare(b[0], 'ru'));
-        downloadCsv('техника', ['Техника', 'Дата', 'Действие', 'Позиция', 'Артикул', 'Код', 'Кол-во', 'Моточасы', 'Кто', 'Состояние'], rows);
+        downloadCsv(
+          'техника',
+          ['Техника', 'Дата', 'Действие', 'Позиция', 'Артикул', 'Код', 'Кол-во', 'Моточасы', 'Кто', 'Состояние'],
+          rows,
+        );
       },
     ],
     [
@@ -89,7 +184,16 @@ export default function Data() {
       'Все установки с ценой: техника, деталь, сумма, механик',
       () => {
         const rows = installCosts(state).byMachine.flatMap((mc) =>
-          mc.moves.map((m) => [locLabel(state, mc.code), fmtDate(m.createdAt), state.items[state.units[m.unit]?.itemId]?.name, m.unit, m.qty, m.price, m.sum, m.userName]),
+          mc.moves.map((m) => [
+            locLabel(state, mc.code),
+            fmtDate(m.createdAt),
+            state.items[state.units[m.unit]?.itemId]?.name,
+            m.unit,
+            m.qty,
+            m.price,
+            m.sum,
+            m.userName,
+          ]),
         );
         downloadCsv('затраты', ['Техника', 'Дата', 'Позиция', 'Код', 'Кол-во', 'Цена, ₽', 'Сумма, ₽', 'Кто'], rows);
       },

@@ -55,7 +55,14 @@ export default function Inventory({ params }) {
       } else {
         ops.push({
           kind: 'move',
-          payload: { type: 'adjust', unit: d.unit, qty: -d.delta, from: loc, to: null, comment: 'Инвентаризация: не найдено' },
+          payload: {
+            type: 'adjust',
+            unit: d.unit,
+            qty: -d.delta,
+            from: loc,
+            to: null,
+            comment: 'Инвентаризация: не найдено',
+          },
         });
       }
     }
@@ -136,7 +143,9 @@ export default function Inventory({ params }) {
                   <b>{unitLabel(state, d.unit)}</b> <span className="muted small">{d.unit}</span>
                   <div className={d.delta > 0 ? 'ok-text small' : 'warn-text small'}>
                     по учёту {fmtQty(d.expected, item)}, найдено {fmtQty(d.found, item)}
-                    {d.delta > 0 && elsewhere.length > 0 && ` · числилась: ${elsewhere.map((w) => locLabel(state, w.loc)).join(', ')}`}
+                    {d.delta > 0 &&
+                      elsewhere.length > 0 &&
+                      ` · числилась: ${elsewhere.map((w) => locLabel(state, w.loc)).join(', ')}`}
                   </div>
                 </li>
               );

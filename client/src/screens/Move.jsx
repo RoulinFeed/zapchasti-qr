@@ -3,6 +3,7 @@ import { useStore, recordMany } from '../store.js';
 import { unitLocations, normalizeCode } from '../../../shared/state.js';
 import { ScanField } from '../Scanner.jsx';
 import { Section, Message, LocationSelect, kindName, locLabel, CONDITIONS } from '../ui.jsx';
+import { Thumb } from '../photo.jsx';
 
 const CONFIG = {
   transfer: {
@@ -139,7 +140,12 @@ export default function Move({ args, params }) {
         {cfg.destKinds && (
           <div className="field">
             <div className="label">{cfg.destTitle}</div>
-            <LocationSelect value={dest} onChange={setDest} kinds={cfg.destKinds} placeholder="Выберите или отсканируйте" />
+            <LocationSelect
+              value={dest}
+              onChange={setDest}
+              kinds={cfg.destKinds}
+              placeholder="Выберите или отсканируйте"
+            />
           </div>
         )}
         {type === 'install' && (
@@ -173,6 +179,7 @@ export default function Move({ args, params }) {
           <ul className="list">
             {lines.map((l, i) => (
               <li key={l.unit} className="line">
+                <Thumb id={l.item?.photo} />
                 <div className="grow">
                   <b>{l.item?.name}</b> <span className="muted small">{l.unit}</span>
                   {l.options.length > 1 ? (
@@ -196,7 +203,11 @@ export default function Move({ args, params }) {
                     inputMode="decimal"
                   />
                 )}
-                <button className="btn ghost" onClick={() => setLines(lines.filter((_, j) => j !== i))} aria-label="Убрать">
+                <button
+                  className="btn ghost"
+                  onClick={() => setLines(lines.filter((_, j) => j !== i))}
+                  aria-label="Убрать"
+                >
                   ✕
                 </button>
               </li>

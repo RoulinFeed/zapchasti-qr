@@ -26,6 +26,14 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,wasm}'],
+        // Однажды просмотренные фото запчастей доступны и без связи.
+        runtimeCaching: [
+          {
+            urlPattern: /\/api\/photos\//,
+            handler: 'CacheFirst',
+            options: { cacheName: 'photos', expiration: { maxEntries: 3000 } },
+          },
+        ],
       },
     }),
   ],

@@ -4,6 +4,7 @@ import { normalizeCode, unitLocations } from '../../../shared/state.js';
 import { ScanField } from '../Scanner.jsx';
 import { Section, Message, ItemPicker, LocationSelect, fmtQty, locLabel } from '../ui.jsx';
 import { addToPrintQueue } from './Labels.jsx';
+import { PhotoInput } from '../photo.jsx';
 
 const LAST_WH = 'zapchasti.lastWarehouse';
 
@@ -38,8 +39,13 @@ function NewItemForm({ onCreate, onCancel }) {
           <input value={f.unitName} onChange={set('unitName')} />
         </label>
       </div>
+      <PhotoInput value={f.photo || null} onChange={(photo) => setF({ ...f, photo })} />
       <div className="row">
-        <button className="btn primary" disabled={!f.name.trim()} onClick={() => onCreate({ ...f, id: uid(), name: f.name.trim() })}>
+        <button
+          className="btn primary"
+          disabled={!f.name.trim()}
+          onClick={() => onCreate({ ...f, id: uid(), name: f.name.trim() })}
+        >
           Создать
         </button>
         <button className="btn" onClick={onCancel}>
@@ -201,7 +207,10 @@ export default function Receive({ params }) {
                 </button>
               </div>
             ) : creating ? (
-              <NewItemForm onCreate={(it) => (setNewItem(it), setCreating(false))} onCancel={() => setCreating(false)} />
+              <NewItemForm
+                onCreate={(it) => (setNewItem(it), setCreating(false))}
+                onCancel={() => setCreating(false)}
+              />
             ) : (
               <>
                 <ItemPicker onPick={setItem} />

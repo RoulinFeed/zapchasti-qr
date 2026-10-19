@@ -113,10 +113,7 @@ export default function App() {
           <div className="side-user">
             <ThemeSwitch />
             <div>{user.name}</div>
-            <button
-              className="btn ghost small"
-              onClick={() => logout().catch((e) => alert(e.message))}
-            >
+            <button className="btn ghost small" onClick={() => logout().catch((e) => alert(e.message))}>
               Выйти
             </button>
           </div>

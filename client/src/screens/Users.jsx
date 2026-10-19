@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { useStore, isOwner } from '../store.js';
 import { Section, Message } from '../ui.jsx';
 
-const ROLES = { owner: 'Главный', admin: 'Руководитель', storekeeper: 'Кладовщик', mechanic: 'Механик' };
+const ROLES = { owner: 'Администратор', admin: 'Руководитель', storekeeper: 'Кладовщик', mechanic: 'Механик' };
 
 function UserForm({ user, onDone }) {
   const me = useStore((s) => s.user);
@@ -48,14 +48,14 @@ function UserForm({ user, onDone }) {
       </div>
       {user && (
         <label className="check">
-          <input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} /> Работает
-          (снимите, чтобы закрыть доступ)
+          <input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />{' '}
+          Работает (снимите, чтобы закрыть доступ)
         </label>
       )}
       <p className="muted small">
         Механик может перемещать, ставить и снимать детали. Кладовщик ещё делает приход, инвентаризацию и ведёт каталог.
-        Руководитель управляет сотрудниками. Главный может ещё исправлять и отменять проведённые операции в журнале и
-        назначать других главных.
+        Руководитель управляет сотрудниками. Администратор может ещё исправлять и отменять проведённые операции в журнале и
+        назначать других администраторов.
       </p>
       {err && <Message kind="error">{err}</Message>}
       <div className="row">

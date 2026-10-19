@@ -25,7 +25,12 @@ function set(patch) {
 }
 
 export function useStore(selector = (s) => s) {
-  return selector(useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => snapshot));
+  return selector(
+    useSyncExternalStore(
+      (l) => (listeners.add(l), () => listeners.delete(l)),
+      () => snapshot,
+    ),
+  );
 }
 
 export function getStore() {

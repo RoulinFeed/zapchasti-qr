@@ -62,7 +62,10 @@ export default function Costs() {
                   {m.moves.map((mv) => (
                     <li key={mv.id} className="line small">
                       <span className="grow">
-                        {unitLabel(state, mv.unit)} <span className="muted">· {fmtDate(mv.createdAt)} · {mv.userName}</span>
+                        {unitLabel(state, mv.unit)}{' '}
+                        <span className="muted">
+                          · {fmtDate(mv.createdAt)} · {mv.userName}
+                        </span>
                       </span>
                       <span>
                         {mv.qty} × {fmtMoney(mv.price)}

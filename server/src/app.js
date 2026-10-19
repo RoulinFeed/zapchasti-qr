@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { validateOp, CODE_PREFIX } from '../../shared/state.js';
@@ -9,6 +11,16 @@ import { canWrite, checkPin, hashPin, isAdmin, newToken, ROLES } from './auth.js
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MECHANIC_MOVES = ['transfer', 'install', 'remove'];
 const PAGE = 5000;
+const PHOTO_ID = /^[0-9a-f-]{36}$/;
+const MAX_PHOTO = 3 * 1024 * 1024;
+
+// Фото определяем по первым байтам, а не по тому, что прислал клиент.
+function photoType(buf) {
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
+  if (buf.slice(0, 4).toString('hex') === '89504e47') return 'image/png';
+  if (buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WEBP') return 'image/webp';
+  return null;
+}
 
 export async function migrate(pool) {
   await pool.query(readFileSync(path.join(here, 'schema.sql'), 'utf8'));
@@ -48,8 +60,24 @@ function formatCode(prefix, n) {
   return `${prefix}-${String(n).padStart(width, '0')}`;
 }
 
-export function buildApp({ pool, staticDir, logger = false }) {
+export function buildApp({ pool, staticDir, photoDir, logger = false }) {
   const app = Fastify({ logger, bodyLimit: 10 * 1024 * 1024 });
+  if (photoDir) mkdirSync(photoDir, { recursive: true });
+
+  // Фото отдаются без входа: id случайный и не угадывается, а тег <img> не умеет передавать токен.
+  app.get('/api/photos/:id', async (req, reply) => {
+    const { id } = req.params;
+    if (!photoDir || !PHOTO_ID.test(id)) return reply.code(404).send({ error: 'Не найдено' });
+    try {
+      const buf = await readFile(path.join(photoDir, id));
+      return reply
+        .type(photoType(buf) || 'application/octet-stream')
+        .header('cache-control', 'public, max-age=31536000, immutable')
+        .send(buf);
+    } catch {
+      return reply.code(404).send({ error: 'Не найдено' });
+    }
+  });
 
   async function auth(req, reply) {
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -142,6 +170,19 @@ export function buildApp({ pool, staticDir, logger = false }) {
       return { codes: Array.from({ length: n }, (_, i) => formatCode(prefix, first + i)) };
     });
 
+    // Загрузка фото запчасти. Приложение заранее уменьшает снимок, сюда приходит base64.
+    api.post('/api/photos', async (req, reply) => {
+      if (!photoDir) return reply.code(500).send({ error: 'Хранилище фото не настроено' });
+      if (req.user.role === 'mechanic') return reply.code(403).send({ error: 'Недостаточно прав' });
+      const data = String(req.body?.data || '').replace(/^data:[^,]*,/, '');
+      const buf = Buffer.from(data, 'base64');
+      if (!buf.length || buf.length > MAX_PHOTO) return reply.code(400).send({ error: 'Фото слишком большое или пустое' });
+      if (!photoType(buf)) return reply.code(400).send({ error: 'Это не картинка (нужен JPEG, PNG или WebP)' });
+      const id = randomUUID();
+      await writeFile(path.join(photoDir, id), buf);
+      return { id };
+    });
+
     api.get('/api/users', async (req) => {
       const { rows } = await pool.query('select * from users order by name');
       // Список имён нужен всем (кому передаю деталь), роли и логины видит только руководитель.
@@ -153,12 +194,12 @@ export function buildApp({ pool, staticDir, logger = false }) {
     api.post('/api/users', { preHandler: adminOnly }, async (req, reply) => {
       const { id, login, name, role, pin, active } = req.body || {};
       if (!ROLES.includes(role)) return reply.code(400).send({ error: 'Неизвестная роль' });
-      // Назначать главных и менять их учётные записи может только главный.
+      // Назначать администраторов и менять их учётные записи может только администратор.
       if (req.user.role !== 'owner') {
-        if (role === 'owner') return reply.code(403).send({ error: 'Назначить главного может только главный' });
+        if (role === 'owner') return reply.code(403).send({ error: 'Назначить администратора может только администратор' });
         if (id) {
           const { rows } = await pool.query('select role from users where id = $1', [id]);
-          if (rows[0]?.role === 'owner') return reply.code(403).send({ error: 'Изменить главного может только главный' });
+          if (rows[0]?.role === 'owner') return reply.code(403).send({ error: 'Изменить администратора может только администратор' });
         }
       }
       if (id && Number(id) === req.user.id && (role !== req.user.role || active === false))

@@ -96,7 +96,10 @@ export default function Labels({ params }) {
     try {
       const codes = await allocateCodes(blankPrefix, Number(blankCount) || 1);
       await printLabels(state, codes, format);
-      setMsg({ kind: 'ok', text: `Выданы коды ${codes[0]} … ${codes.at(-1)}. При приходе отсканируйте этикетку и выберите позицию.` });
+      setMsg({
+        kind: 'ok',
+        text: `Выданы коды ${codes[0]} … ${codes.at(-1)}. При приходе отсканируйте этикетку и выберите позицию.`,
+      });
     } catch (e) {
       setMsg({ kind: 'error', text: e.message });
     }
@@ -108,7 +111,10 @@ export default function Labels({ params }) {
     <>
       <Section title="Формат этикеток">
         <div className="seg">
-          <button className={`btn ${format.mode === 'roll' ? 'primary' : ''}`} onClick={() => saveFormat({ mode: 'roll' })}>
+          <button
+            className={`btn ${format.mode === 'roll' ? 'primary' : ''}`}
+            onClick={() => saveFormat({ mode: 'roll' })}
+          >
             Принтер этикеток
           </button>
           <button className={`btn ${format.mode === 'a4' ? 'primary' : ''}`} onClick={() => saveFormat({ mode: 'a4' })}>
@@ -119,17 +125,29 @@ export default function Labels({ params }) {
           {format.mode === 'roll' && (
             <label className="field">
               Ширина, мм
-              <input value={format.w} onChange={(e) => saveFormat({ w: Number(e.target.value) || 40 })} inputMode="numeric" />
+              <input
+                value={format.w}
+                onChange={(e) => saveFormat({ w: Number(e.target.value) || 40 })}
+                inputMode="numeric"
+              />
             </label>
           )}
           <label className="field">
             Высота, мм
-            <input value={format.h} onChange={(e) => saveFormat({ h: Number(e.target.value) || 25 })} inputMode="numeric" />
+            <input
+              value={format.h}
+              onChange={(e) => saveFormat({ h: Number(e.target.value) || 25 })}
+              inputMode="numeric"
+            />
           </label>
           {format.mode === 'a4' && (
             <label className="field">
               Столбцов на листе
-              <input value={format.cols} onChange={(e) => saveFormat({ cols: Number(e.target.value) || 4 })} inputMode="numeric" />
+              <input
+                value={format.cols}
+                onChange={(e) => saveFormat({ cols: Number(e.target.value) || 4 })}
+                inputMode="numeric"
+              />
             </label>
           )}
         </div>
@@ -202,7 +220,16 @@ export default function Labels({ params }) {
           ))}
         </ul>
         {locations.length > 0 && (
-          <button className="btn" onClick={() => printLabels(state, locations.map((l) => l.code), format)}>
+          <button
+            className="btn"
+            onClick={() =>
+              printLabels(
+                state,
+                locations.map((l) => l.code),
+                format,
+              )
+            }
+          >
             Напечатать все
           </button>
         )}

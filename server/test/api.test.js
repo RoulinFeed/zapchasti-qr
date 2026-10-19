@@ -1,6 +1,9 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { buildApp, ensureAdmin, migrate } from '../src/app.js';
 import { buildState, locationContents, itemTotals } from '../../shared/state.js';
 
@@ -13,7 +16,7 @@ before(async () => {
   await pool.query('drop table if exists sessions, ops, label_counters, users cascade');
   await migrate(pool);
   await ensureAdmin(pool, { login: 'ruslan', name: 'Руслан', pin: '1234' });
-  app = buildApp({ pool });
+  app = buildApp({ pool, photoDir: mkdtempSync(path.join(tmpdir(), 'photos-')) });
 });
 
 after(async () => {
@@ -167,16 +170,16 @@ test('нестыковки и затраты считаются из журна�
   assert.deepEqual(openIssues(resolved).map((i) => i.unit), ['B-1']);
 });
 
-test('главный: исправляет и отменяет операции, остальные не могут', async () => {
+test('администратор: исправляет и отменяет операции, остальные не могут', async () => {
   const { token } = await login('ruslan', '1234');
   await call(token, 'POST', '/api/users', { login: 'boss2', name: 'Зам', role: 'admin', pin: '7777' });
   const admin = await login('boss2', '7777');
 
-  // руководитель не может назначить главного и изменить главного
+  // руководитель не может назначить администратора и изменить администратора
   assert.equal((await call(admin.token, 'POST', '/api/users', { login: 'x1', name: 'x', role: 'owner', pin: '1111' })).statusCode, 403);
   const me = (await call(token, 'GET', '/api/me')).json().user;
   assert.equal((await call(admin.token, 'POST', '/api/users', { id: me.id, login: 'ruslan', name: 'Р', role: 'admin' })).statusCode, 403);
-  // главный не может разжаловать сам себя
+  // администратор не может разжаловать сам себя
   assert.equal((await call(token, 'POST', '/api/users', { id: me.id, login: 'ruslan', name: 'Р', role: 'admin' })).statusCode, 400);
 
   const wrong = op('move', { type: 'transfer', unit: 'P-000001', qty: 1, from: 'V-001', to: 'W-001' });
@@ -198,9 +201,25 @@ test('главный: исправляет и отменяет операции,
   assert.equal(m.voided.reason, 'ошиблись складом');
 });
 
-test('первый руководитель старой базы становится главным', async () => {
+test('первый руководитель старой базы становится администратором', async () => {
   await pool.query("update users set role = 'admin' where role = 'owner'");
   await migrate(pool);
   const { rows } = await pool.query("select login from users where role = 'owner'");
   assert.deepEqual(rows.map((r) => r.login), ['ruslan']);
+});
+
+test('фото: загрузка, выдача и защита от не-картинок', async () => {
+  const { token } = await login('ruslan', '1234');
+  // минимальный PNG 1×1
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const up = await call(token, 'POST', '/api/photos', { data: `data:image/png;base64,${png}` });
+  assert.equal(up.statusCode, 200);
+  const got = await app.inject({ method: 'GET', url: `/api/photos/${up.json().id}` });
+  assert.equal(got.statusCode, 200);
+  assert.equal(got.headers['content-type'], 'image/png');
+
+  const bad = await call(token, 'POST', '/api/photos', { data: Buffer.from('<script>').toString('base64') });
+  assert.equal(bad.statusCode, 400);
+  assert.equal((await app.inject({ method: 'GET', url: '/api/photos/..%2F..%2Fetc%2Fpasswd' })).statusCode, 404);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/photos', payload: { data: png } })).statusCode, 401);
 });

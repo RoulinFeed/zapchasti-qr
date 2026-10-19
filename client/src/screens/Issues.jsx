@@ -34,7 +34,10 @@ function IssueRow({ issue, state, manage }) {
         (open ? (
           <div className="row">
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Что выяснили (необязательно)" />
-            <button className="btn primary small" onClick={() => record('issue.resolve', { moveId: issue.moveId, note: note.trim() })}>
+            <button
+              className="btn primary small"
+              onClick={() => record('issue.resolve', { moveId: issue.moveId, note: note.trim() })}
+            >
               Готово
             </button>
           </div>
@@ -76,8 +79,8 @@ export default function Issues() {
       </Section>
       <Section title={`Нестыковки в операциях (${issues.length})`}>
         <p className="muted small">
-          Так бывает, когда люди работают без связи и не видят действий друг друга. Выясните, где деталь на самом деле, поправьте
-          учёт и отметьте, что разобрались.
+          Так бывает, когда люди работают без связи и не видят действий друг друга. Выясните, где деталь на самом деле,
+          поправьте учёт и отметьте, что разобрались.
         </p>
         {issues.length === 0 && <p className="muted">Нестыковок нет.</p>}
         <ul className="list">

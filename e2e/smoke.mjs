@@ -60,8 +60,24 @@ await shot('03-receive');
 await go('catalog');
 await page.getByText('Подшипник 6205').click();
 await page.getByLabel('Цена закупки, ₽').fill('1 250,50');
+// Фото детали: выбираем картинку, оно уходит на сервер
+const png = await page.evaluate(() => {
+  const c = document.createElement('canvas');
+  c.width = 300;
+  c.height = 200;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c84';
+  g.fillRect(0, 0, 300, 200);
+  return c.toDataURL('image/png').split(',')[1];
+});
+await page
+  .locator('input[type=file]:not([capture])')
+  .setInputFiles({ name: 'bearing.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+await page.locator('.photo-input img.photo').waitFor();
 await page.getByRole('button', { name: 'Сохранить' }).click();
 await page.getByText(/запас 2 шт/).waitFor();
+await page.locator('img.thumb').first().waitFor();
+await shot('03b-catalog-photo');
 
 // Приход партии болтов по готовой этикетке B-000001 (печатали впрок)
 await go('labels');
@@ -163,7 +179,7 @@ await page.getByPlaceholder('Что выяснили (необязательно
 await page.getByRole('button', { name: 'Готово' }).click();
 await page.getByText('Нестыковок нет.').waitFor();
 
-// Главный исправляет ошибочную операцию: перемещение подшипника в Газель отменяем
+// Администратор исправляет ошибочную операцию: перемещение подшипника в Газель отменяем
 await go('scan?code=P-000001');
 await page.getByRole('button', { name: 'Исправить' }).first().click();
 await page.getByPlaceholder('Например: ошиблись Газелью').fill('деталь на комбайне, перемещения не было');

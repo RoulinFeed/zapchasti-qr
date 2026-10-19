@@ -12,7 +12,9 @@ export default function Problems() {
         {rejected.map((op) => (
           <li key={op.id} className="line">
             <span className="grow">
-              <b>{op.kind === 'move' ? `${MOVE_TYPES[op.payload.type]}: ${unitLabel(state, op.payload.unit)}` : op.kind}</b>
+              <b>
+                {op.kind === 'move' ? `${MOVE_TYPES[op.payload.type]}: ${unitLabel(state, op.payload.unit)}` : op.kind}
+              </b>
               <div className="muted small">
                 {fmtDate(op.createdAt)} · {op.error}
               </div>

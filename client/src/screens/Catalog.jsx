@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useStore, record, recordMany, uid } from '../store.js';
 import { itemTotals } from '../../../shared/state.js';
 import { Section, Message, fmtDate, fmtQty, searchItems } from '../ui.jsx';
+import { PhotoInput, Thumb } from '../photo.jsx';
 
 const FIELDS = [
   ['name', 'Название*'],
@@ -15,7 +16,12 @@ const FIELDS = [
 ];
 
 const NUMERIC = ['minQty', 'price'];
-const toNum = (v) => Number(String(v ?? '').replace(/\s/g, '').replace(',', '.')) || 0;
+const toNum = (v) =>
+  Number(
+    String(v ?? '')
+      .replace(/\s/g, '')
+      .replace(',', '.'),
+  ) || 0;
 
 function ItemForm({ item, onDone }) {
   const [f, setF] = useState({ tracking: 'piece', unitName: 'шт', minQty: 0, ...item });
@@ -23,7 +29,13 @@ function ItemForm({ item, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   async function save() {
     try {
-      const payload = { ...f, id: f.id || uid(), name: String(f.name || '').trim(), minQty: toNum(f.minQty), price: toNum(f.price) };
+      const payload = {
+        ...f,
+        id: f.id || uid(),
+        name: String(f.name || '').trim(),
+        minQty: toNum(f.minQty),
+        price: toNum(f.price),
+      };
       await record('item.upsert', payload);
       onDone();
     } catch (e) {
@@ -47,10 +59,11 @@ function ItemForm({ item, onDone }) {
           </select>
         </label>
       </div>
+      <PhotoInput value={f.photo || null} onChange={(photo) => setF({ ...f, photo })} />
       {item?.id && (
         <label className="check">
-          <input type="checkbox" checked={!!f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} /> В
-          архиве (не показывать в поиске)
+          <input type="checkbox" checked={!!f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} />{' '}
+          В архиве (не показывать в поиске)
         </label>
       )}
       {err && <Message kind="error">{err}</Message>}
@@ -69,7 +82,10 @@ function ItemForm({ item, onDone }) {
 // --- пробная загрузка из Excel ---
 
 function parseTable(text) {
-  const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim());
+  const lines = text
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((l) => l.trim());
   if (!lines.length) return [];
   const first = lines[0];
   const sep = first.includes('\t') ? '\t' : first.split(';').length >= first.split(',').length ? ';' : ',';
@@ -147,7 +163,14 @@ function Import({ onDone }) {
         payload: existing
           ? // У уже существующей позиции обновляем только заполненные поля.
             { ...Object.fromEntries(Object.entries(it).filter(([, v]) => v !== '' && v !== 0)), id: existing.id }
-          : { tracking, ...it, unitName: it.unitName || 'шт', id: uid(), importBatch: batch, importedAt: new Date().toISOString() },
+          : {
+              tracking,
+              ...it,
+              unitName: it.unitName || 'шт',
+              id: uid(),
+              importBatch: batch,
+              importedAt: new Date().toISOString(),
+            },
       };
     });
     await recordMany(ops);
@@ -166,18 +189,34 @@ function Import({ onDone }) {
   const preview = data.length ? toItems().slice(0, 5) : [];
 
   return (
-    <Section title="Пробная загрузка каталога" actions={<button className="btn ghost small" onClick={onDone}>Закрыть</button>}>
+    <Section
+      title="Пробная загрузка каталога"
+      actions={
+        <button className="btn ghost small" onClick={onDone}>
+          Закрыть
+        </button>
+      }
+    >
       <p className="muted small">
         Скопируйте строки в Excel (вместе с заголовками) и вставьте сюда, или выберите файл CSV. Остатки не загружаются,
         только названия и артикулы. Загрузку можно потом удалить целиком.
       </p>
-      <textarea rows={6} value={text} onChange={(e) => (setText(e.target.value), setMap(null))} placeholder="Вставьте сюда из Excel" />
+      <textarea
+        rows={6}
+        value={text}
+        onChange={(e) => (setText(e.target.value), setMap(null))}
+        placeholder="Вставьте сюда из Excel"
+      />
       <input type="file" accept=".csv,.txt,.tsv" onChange={readFile} />
       {rows.length > 0 && (
         <>
           <label className="check">
-            <input type="checkbox" checked={hasHeader} onChange={(e) => (setHasHeader(e.target.checked), setMap(null))} /> Первая
-            строка — заголовки
+            <input
+              type="checkbox"
+              checked={hasHeader}
+              onChange={(e) => (setHasHeader(e.target.checked), setMap(null))}
+            />{' '}
+            Первая строка — заголовки
           </label>
           <div className="grid2">
             {FIELDS.map(([k, label]) => (
@@ -205,7 +244,8 @@ function Import({ onDone }) {
           <ul className="list">
             {preview.map((it, i) => (
               <li key={i} className="pad">
-                <b>{it.name}</b> <span className="muted small">{[it.sku, it.manufacturer, it.models].filter(Boolean).join(' · ')}</span>
+                <b>{it.name}</b>{' '}
+                <span className="muted small">{[it.sku, it.manufacturer, it.models].filter(Boolean).join(' · ')}</span>
               </li>
             ))}
           </ul>
@@ -233,7 +273,11 @@ function ImportBatches() {
   async function remove(items) {
     const used = new Set(Object.values(state.units).map((u) => u.itemId));
     const free = items.filter((it) => !used.has(it.id));
-    if (!confirm(`Убрать в архив ${free.length} позиций этой загрузки? Позиции, на которые уже есть этикетки (${items.length - free.length}), останутся.`))
+    if (
+      !confirm(
+        `Убрать в архив ${free.length} позиций этой загрузки? Позиции, на которые уже есть этикетки (${items.length - free.length}), останутся.`,
+      )
+    )
       return;
     await recordMany(free.map((it) => ({ kind: 'item.upsert', payload: { ...it, archived: true } })));
   }
@@ -268,9 +312,7 @@ export default function Catalog({ params, navigate }) {
   }
   if (importing) return <Import onDone={() => setImporting(false)} />;
 
-  const list = showArchived
-    ? Object.values(state.items).filter((i) => i.archived)
-    : searchItems(state.items, q);
+  const list = showArchived ? Object.values(state.items).filter((i) => i.archived) : searchItems(state.items, q);
 
   return (
     <>
@@ -289,17 +331,25 @@ export default function Catalog({ params, navigate }) {
       >
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск: название, артикул, модель" />
         <label className="check">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Показать архив
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Показать
+          архив
         </label>
         <ul className="list">
           {list.slice(0, 300).map((it) => (
             <li key={it.id}>
-              <a className="list-btn" href={`#/catalog?id=${it.id}`}>
-                <b>{it.name}</b>
-                <span className="muted">
-                  {[it.sku, it.tracking === 'batch' ? 'партией' : 'поштучно', `запас ${fmtQty(totals[it.id]?.total || 0, it)}`]
-                    .filter(Boolean)
-                    .join(' · ')}
+              <a className="list-btn row-btn" href={`#/catalog?id=${it.id}`}>
+                <Thumb id={it.photo} />
+                <span className="grow">
+                  <b>{it.name}</b>
+                  <span className="muted block">
+                    {[
+                      it.sku,
+                      it.tracking === 'batch' ? 'партией' : 'поштучно',
+                      `запас ${fmtQty(totals[it.id]?.total || 0, it)}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
                 </span>
               </a>
             </li>

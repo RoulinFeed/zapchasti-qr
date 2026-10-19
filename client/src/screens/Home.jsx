@@ -1,13 +1,17 @@
 import { useStore, canManage } from '../store.js';
 import { lowStock, openIssues } from '../../../shared/state.js';
 import { ScanField } from '../Scanner.jsx';
-import { Section, Message, fmtDate, moveText, unitLabel, fmtQty } from '../ui.jsx';
+import { MoveList } from '../MoveList.jsx';
+import { Section, Message, fmtQty } from '../ui.jsx';
 
 export default function Home({ navigate }) {
   const { user, state } = useStore();
   const manage = canManage(user);
   const low = lowStock(state);
-  const recent = state.moves.filter((m) => !m.voided).slice(-8).reverse();
+  const recent = state.moves
+    .filter((m) => !m.voided)
+    .slice(-8)
+    .reverse();
 
   const actions = [
     ['move/transfer', 'Переместить / выдать', 'Склад, Газель, другой механик'],
@@ -22,7 +26,9 @@ export default function Home({ navigate }) {
     <>
       <Section title="Что отсканировать?">
         <ScanField onScan={(code) => navigate(`/scan?code=${encodeURIComponent(code)}`)} />
-        <p className="muted small">Отсканируйте деталь, ячейку, Газель или комбайн, чтобы увидеть, что это и где лежит.</p>
+        <p className="muted small">
+          Отсканируйте деталь, ячейку, Газель или комбайн, чтобы увидеть, что это и где лежит.
+        </p>
       </Section>
 
       {manage && openIssues(state).length > 0 && (
@@ -45,7 +51,10 @@ export default function Home({ navigate }) {
           <ul className="list">
             {low.slice(0, 5).map(({ item, total }) => (
               <li key={item.id} className="pad">
-                {item.name} <span className="muted">— осталось {fmtQty(total, item)}, минимум {item.minQty}</span>
+                {item.name}{' '}
+                <span className="muted">
+                  — осталось {fmtQty(total, item)}, минимум {item.minQty}
+                </span>
               </li>
             ))}
           </ul>
@@ -53,18 +62,7 @@ export default function Home({ navigate }) {
       )}
 
       <Section title="Последние движения">
-        {recent.length === 0 && <p className="muted">Пока ничего не было.</p>}
-        <ul className="list">
-          {recent.map((m) => (
-            <li key={m.id} className="pad">
-              <a href={`#/scan?code=${m.unit}`}>{unitLabel(state, m.unit)}</a>
-              <div className="muted small">
-                {moveText(state, m)} · {m.qty} · {m.userName || ''} · {fmtDate(m.createdAt)}
-                {m.seq == null && ' · не отправлено'}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <MoveList state={state} moves={recent.slice().reverse()} empty="Пока ничего не было." />
       </Section>
     </>
   );

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { LOCATION_KINDS, CONDITIONS, MOVE_TYPES } from '../../shared/state.js';
 import { useStore } from './store.js';
+import { Thumb } from './photo.jsx';
 
 export function navigate(path) {
   window.location.hash = path;
@@ -9,7 +10,13 @@ export function navigate(path) {
 export function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function fmtQty(q, item) {
@@ -70,10 +77,15 @@ export function ItemPicker({ onPick, placeholder = 'Найти позицию: �
         <ul className="list">
           {found.map((it) => (
             <li key={it.id}>
-              <button className="list-btn" onClick={() => (onPick(it), setQ(''))}>
-                <b>{it.name}</b>
-                <span className="muted">
-                  {[it.sku, it.manufacturer, it.tracking === 'batch' ? 'партией' : 'поштучно'].filter(Boolean).join(' · ')}
+              <button className="list-btn row-btn" onClick={() => (onPick(it), setQ(''))}>
+                <Thumb id={it.photo} />
+                <span className="grow">
+                  <b>{it.name}</b>
+                  <span className="muted block">
+                    {[it.sku, it.manufacturer, it.tracking === 'batch' ? 'партией' : 'поштучно']
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
                 </span>
               </button>
             </li>

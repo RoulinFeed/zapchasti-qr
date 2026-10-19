@@ -42,7 +42,9 @@ function LocationForm({ loc, onDone }) {
           <input
             value={f.name}
             onChange={set('name')}
-            placeholder={{ machine: 'Акрос 595 №7', van: 'Газель 1', warehouse: 'Основной склад', person: 'Иванов И.' }[f.kind]}
+            placeholder={
+              { machine: 'Акрос 595 №7', van: 'Газель 1', warehouse: 'Основной склад', person: 'Иванов И.' }[f.kind]
+            }
           />
         </label>
         {f.kind === 'machine' && (
@@ -62,11 +64,13 @@ function LocationForm({ loc, onDone }) {
             {f.kind === 'van' ? 'Механик' : 'Сотрудник в системе'}
             <select value={f.userId || ''} onChange={set('userId')}>
               <option value="">—</option>
-              {users.filter((u) => u.active).map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
+              {users
+                .filter((u) => u.active)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
             </select>
           </label>
         )}
@@ -77,11 +81,13 @@ function LocationForm({ loc, onDone }) {
       </div>
       {loc && (
         <label className="check">
-          <input type="checkbox" checked={!!f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} /> Не
-          используется (скрыть)
+          <input type="checkbox" checked={!!f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} />{' '}
+          Не используется (скрыть)
         </label>
       )}
-      {!loc && !online && <Message kind="warn">Для нового места нужна связь с сервером: он выдаёт код для этикетки.</Message>}
+      {!loc && !online && (
+        <Message kind="warn">Для нового места нужна связь с сервером: он выдаёт код для этикетки.</Message>
+      )}
       {err && <Message kind="error">{err}</Message>}
       <div className="row">
         <button className="btn primary" disabled={busy || !f.name.trim() || (!loc && !online)} onClick={save}>
@@ -131,7 +137,8 @@ export default function Locations({ params, navigate }) {
                   <a className="grow" href={`#/locations?code=${l.code}`}>
                     <b className={l.archived ? 'muted' : ''}>{l.name}</b>{' '}
                     <span className="muted small">
-                      {[l.code, l.model, l.invNo].filter(Boolean).join(' · ')} · {locationContents(state, l.code).length} поз.
+                      {[l.code, l.model, l.invNo].filter(Boolean).join(' · ')} ·{' '}
+                      {locationContents(state, l.code).length} поз.
                     </span>
                   </a>
                   <a className="btn small" href={`#/scan?code=${l.code}`}>
