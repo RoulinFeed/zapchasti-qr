@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { useStore, isOwner } from '../store.js';
 import { Section, Message } from '../ui.jsx';
 
-const ROLES = { admin: 'Руководитель', storekeeper: 'Кладовщик', mechanic: 'Механик' };
+const ROLES = { owner: 'Главный', admin: 'Руководитель', storekeeper: 'Кладовщик', mechanic: 'Механик' };
 
 function UserForm({ user, onDone }) {
+  const me = useStore((s) => s.user);
+  const roles = Object.entries(ROLES).filter(([k]) => k !== 'owner' || isOwner(me));
   const [f, setF] = useState({ login: '', name: '', role: 'mechanic', active: true, ...user, pin: '' });
   const [err, setErr] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -31,7 +34,7 @@ function UserForm({ user, onDone }) {
         <label className="field">
           Роль
           <select value={f.role} onChange={set('role')}>
-            {Object.entries(ROLES).map(([k, v]) => (
+            {roles.map(([k, v]) => (
               <option key={k} value={k}>
                 {v}
               </option>
@@ -51,7 +54,8 @@ function UserForm({ user, onDone }) {
       )}
       <p className="muted small">
         Механик может перемещать, ставить и снимать детали. Кладовщик ещё делает приход, инвентаризацию и ведёт каталог.
-        Руководитель управляет сотрудниками.
+        Руководитель управляет сотрудниками. Главный может ещё исправлять и отменять проведённые операции в журнале и
+        назначать других главных.
       </p>
       {err && <Message kind="error">{err}</Message>}
       <div className="row">

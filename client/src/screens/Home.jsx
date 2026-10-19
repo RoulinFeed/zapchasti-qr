@@ -7,7 +7,7 @@ export default function Home({ navigate }) {
   const { user, state } = useStore();
   const manage = canManage(user);
   const low = lowStock(state);
-  const recent = state.moves.slice(-8).reverse();
+  const recent = state.moves.filter((m) => !m.voided).slice(-8).reverse();
 
   const actions = [
     ['move/transfer', 'Переместить / выдать', 'Склад, Газель, другой механик'],

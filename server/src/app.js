@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { validateOp, CODE_PREFIX } from '../../shared/state.js';
-import { canWrite, checkPin, hashPin, newToken } from './auth.js';
+import { canWrite, checkPin, hashPin, isAdmin, newToken, ROLES } from './auth.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MECHANIC_MOVES = ['transfer', 'install', 'remove'];
@@ -21,7 +21,7 @@ export async function ensureAdmin(pool, { login, name, pin }) {
   await pool.query('insert into users (login, name, role, pin_hash) values ($1, $2, $3, $4)', [
     login,
     name || login,
-    'admin',
+    'owner',
     hashPin(pin),
   ]);
   return true;
@@ -63,7 +63,7 @@ export function buildApp({ pool, staticDir, logger = false }) {
   }
 
   function adminOnly(req, reply, done) {
-    if (req.user.role !== 'admin') return reply.code(403).send({ error: 'Только для руководителя' });
+    if (!isAdmin(req.user.role)) return reply.code(403).send({ error: 'Только для руководителя' });
     done();
   }
 
@@ -146,13 +146,23 @@ export function buildApp({ pool, staticDir, logger = false }) {
       const { rows } = await pool.query('select * from users order by name');
       // Список имён нужен всем (кому передаю деталь), роли и логины видит только руководитель.
       return {
-        users: rows.map((u) => (req.user.role === 'admin' ? publicUser(u) : { id: u.id, name: u.name, active: u.active })),
+        users: rows.map((u) => (isAdmin(req.user.role) ? publicUser(u) : { id: u.id, name: u.name, active: u.active })),
       };
     });
 
     api.post('/api/users', { preHandler: adminOnly }, async (req, reply) => {
       const { id, login, name, role, pin, active } = req.body || {};
-      if (!['admin', 'storekeeper', 'mechanic'].includes(role)) return reply.code(400).send({ error: 'Неизвестная роль' });
+      if (!ROLES.includes(role)) return reply.code(400).send({ error: 'Неизвестная роль' });
+      // Назначать главных и менять их учётные записи может только главный.
+      if (req.user.role !== 'owner') {
+        if (role === 'owner') return reply.code(403).send({ error: 'Назначить главного может только главный' });
+        if (id) {
+          const { rows } = await pool.query('select role from users where id = $1', [id]);
+          if (rows[0]?.role === 'owner') return reply.code(403).send({ error: 'Изменить главного может только главный' });
+        }
+      }
+      if (id && Number(id) === req.user.id && (role !== req.user.role || active === false))
+        return reply.code(400).send({ error: 'Нельзя снять роль или закрыть доступ самому себе' });
       if (!login || !name) return reply.code(400).send({ error: 'Нужны логин и имя' });
       if (pin != null && pin !== '' && !/^\d{4,8}$/.test(String(pin)))
         return reply.code(400).send({ error: 'PIN: от 4 до 8 цифр' });

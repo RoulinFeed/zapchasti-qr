@@ -1,7 +1,7 @@
 // Общая логика сервера и приложения: состояние склада собирается из журнала операций.
 // Операции только добавляются, поэтому одинаковый журнал всегда даёт одинаковое состояние.
 
-export const OP_KINDS = ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'];
+export const OP_KINDS = ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', 'move.void'];
 
 export const MOVE_TYPES = {
   receipt: 'Приход',
@@ -44,6 +44,7 @@ export function emptyState() {
     moves: [], // операции перемещения по порядку
     issues: [], // нестыковки, найденные при разборе журнала
     resolved: {}, // moveId -> { note, userName, createdAt } для разобранных нестыковок
+    voided: {}, // moveId -> { reason, userName, createdAt, replacedBy } для отменённых операций
   };
 }
 
@@ -82,6 +83,10 @@ export function validateOp(op) {
     }
     case 'issue.resolve':
       if (!p.moveId) return 'не указана операция';
+      return null;
+    case 'move.void':
+      if (!p.moveId) return 'не указана операция';
+      if (!String(p.reason || '').trim()) return 'укажите причину исправления';
       return null;
   }
   return null;
@@ -129,10 +134,14 @@ export function applyOp(state, op) {
       const qty = Number(p.qty);
       const from = p.from ? normalizeCode(p.from) : null;
       const to = p.to ? normalizeCode(p.to) : null;
-      const issues = findIssues(state, { unit, qty, from, to, type: p.type });
-      addStock(state, unit, from, -qty);
-      addStock(state, unit, to, qty);
-      if (p.condition && state.units[unit]) state.units[unit].condition = p.condition;
+      // Отменённая операция остаётся в истории, но на остатки не влияет.
+      const voided = state.voided[op.id];
+      const issues = voided ? [] : findIssues(state, { unit, qty, from, to, type: p.type });
+      if (!voided) {
+        addStock(state, unit, from, -qty);
+        addStock(state, unit, to, qty);
+        if (p.condition && state.units[unit]) state.units[unit].condition = p.condition;
+      }
       for (const kind of issues) {
         state.issues.push({ moveId: op.id, kind, unit, from, to, qty, type: p.type, createdAt: op.createdAt, userName: op.userName });
       }
@@ -147,9 +156,13 @@ export function applyOp(state, op) {
         from,
         to,
         qty,
+        voided: voided || null,
       });
       break;
     }
+    case 'move.void':
+      // Применяется заранее в buildState; здесь ничего не делаем.
+      break;
     case 'issue.resolve':
       state.resolved[p.moveId] = { note: p.note || '', userName: op.userName, createdAt: op.createdAt };
       break;
@@ -190,6 +203,17 @@ export function openIssues(state) {
 
 export function buildState(ops) {
   const state = emptyState();
+  // Отмены собираем до разбора журнала, чтобы остатки считались так, будто операции не было.
+  for (const op of ops) {
+    if (op.kind === 'move.void' && !validateOp(op)) {
+      state.voided[op.payload.moveId] = {
+        reason: op.payload.reason,
+        replacedBy: op.payload.replacedBy || null,
+        userName: op.userName,
+        createdAt: op.createdAt,
+      };
+    }
+  }
   for (const op of sortOps(ops)) applyOp(state, op);
   return state;
 }
@@ -290,7 +314,7 @@ export function installCosts(state, { from, to } = {}) {
   let total = 0;
   let unpriced = 0;
   for (const m of state.moves) {
-    if (m.type !== 'install') continue;
+    if (m.type !== 'install' || m.voided) continue;
     if (from && m.createdAt < from) continue;
     if (to && m.createdAt > to) continue;
     const price = movePrice(state, m);

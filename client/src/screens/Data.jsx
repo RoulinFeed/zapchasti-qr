@@ -62,9 +62,9 @@ export default function Data() {
         const rows = state.moves.map((m) => {
           const u = state.units[m.unit];
           const it = u && state.items[u.itemId];
-          return [fmtDate(m.createdAt), MOVE_TYPES[m.type], it?.name, it?.sku, m.unit, m.qty, locLabel(state, m.from), locLabel(state, m.to), m.userName, m.hours, CONDITIONS[m.condition], m.comment];
+          return [fmtDate(m.createdAt), MOVE_TYPES[m.type], it?.name, it?.sku, m.unit, m.qty, locLabel(state, m.from), locLabel(state, m.to), m.userName, m.hours, CONDITIONS[m.condition], m.comment, m.voided ? `${m.voided.reason} (${m.voided.userName})` : ''];
         });
-        downloadCsv('движения', ['Дата', 'Операция', 'Позиция', 'Артикул', 'Код', 'Кол-во', 'Откуда', 'Куда', 'Кто', 'Моточасы', 'Состояние', 'Комментарий'], rows);
+        downloadCsv('движения', ['Дата', 'Операция', 'Позиция', 'Артикул', 'Код', 'Кол-во', 'Откуда', 'Куда', 'Кто', 'Моточасы', 'Состояние', 'Комментарий', 'Отменено'], rows);
       },
     ],
     [
@@ -73,7 +73,7 @@ export default function Data() {
       () => {
         const machines = new Set(Object.values(state.locations).filter((l) => l.kind === 'machine').map((l) => l.code));
         const rows = state.moves
-          .filter((m) => machines.has(m.to) || machines.has(m.from))
+          .filter((m) => !m.voided && (machines.has(m.to) || machines.has(m.from)))
           .map((m) => {
             const machine = machines.has(m.to) ? m.to : m.from;
             const u = state.units[m.unit];

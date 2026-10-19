@@ -625,3 +625,8 @@ textarea:focus {
   border-left: 2px solid var(--line);
   margin-bottom: 8px;
 }
+
+.voided > div:not(.no-strike) {
+  text-decoration: line-through;
+  opacity: 0.6;
+}

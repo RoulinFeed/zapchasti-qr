@@ -42,7 +42,7 @@ test('вход: неверный PIN отклоняется, верный даё
   assert.equal((await app.inject({ method: 'POST', url: '/api/login', payload: { login: 'ruslan', pin: '0000' } })).statusCode, 401);
   const r = await login('Ruslan', '1234');
   assert.ok(r.token);
-  assert.equal(r.user.role, 'admin');
+  assert.equal(r.user.role, 'owner');
   assert.equal((await call('bad', 'GET', '/api/me')).statusCode, 401);
 });
 
@@ -165,4 +165,42 @@ test('нестыковки и затраты считаются из журна�
   const resolved = build([...ops, o('issue.resolve', { moveId: openIssues(state)[0].moveId, note: 'ремень на комбайне' })]);
   // разбор относится ко всей операции, поэтому уходят оба замечания по ремню
   assert.deepEqual(openIssues(resolved).map((i) => i.unit), ['B-1']);
+});
+
+test('главный: исправляет и отменяет операции, остальные не могут', async () => {
+  const { token } = await login('ruslan', '1234');
+  await call(token, 'POST', '/api/users', { login: 'boss2', name: 'Зам', role: 'admin', pin: '7777' });
+  const admin = await login('boss2', '7777');
+
+  // руководитель не может назначить главного и изменить главного
+  assert.equal((await call(admin.token, 'POST', '/api/users', { login: 'x1', name: 'x', role: 'owner', pin: '1111' })).statusCode, 403);
+  const me = (await call(token, 'GET', '/api/me')).json().user;
+  assert.equal((await call(admin.token, 'POST', '/api/users', { id: me.id, login: 'ruslan', name: 'Р', role: 'admin' })).statusCode, 403);
+  // главный не может разжаловать сам себя
+  assert.equal((await call(token, 'POST', '/api/users', { id: me.id, login: 'ruslan', name: 'Р', role: 'admin' })).statusCode, 400);
+
+  const wrong = op('move', { type: 'transfer', unit: 'P-000001', qty: 1, from: 'V-001', to: 'W-001' });
+  await call(token, 'POST', '/api/sync', { ops: [wrong] });
+  const voidOp = op('move.void', { moveId: wrong.id, reason: 'ошиблись складом' });
+  const byAdmin = (await call(admin.token, 'POST', '/api/sync', { ops: [voidOp] })).json();
+  assert.equal(byAdmin.results[0].status, 'rejected');
+  const noReason = (await call(token, 'POST', '/api/sync', { ops: [op('move.void', { moveId: wrong.id })] })).json();
+  assert.equal(noReason.results[0].status, 'rejected');
+
+  const before = buildState((await call(token, 'POST', '/api/sync', { since: 0 })).json().ops);
+  const res = (await call(token, 'POST', '/api/sync', { ops: [voidOp], since: 0 })).json();
+  assert.equal(res.results[0].status, 'ok');
+  const after = buildState(res.ops);
+  // отменённое перемещение больше не влияет на остатки, но видно в истории
+  assert.ok(before.stock['P-000001']['W-001'] > 0);
+  assert.equal(after.stock['P-000001']['W-001'] ?? 0, 0);
+  const m = after.moves.find((x) => x.id === wrong.id);
+  assert.equal(m.voided.reason, 'ошиблись складом');
+});
+
+test('первый руководитель старой базы становится главным', async () => {
+  await pool.query("update users set role = 'admin' where role = 'owner'");
+  await migrate(pool);
+  const { rows } = await pool.query("select login from users where role = 'owner'");
+  assert.deepEqual(rows.map((r) => r.login), ['ruslan']);
 });

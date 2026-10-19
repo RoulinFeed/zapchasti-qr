@@ -20,10 +20,17 @@ export function newToken() {
 
 // Кто какие операции может записывать
 const ALLOWED = {
+  owner: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', 'move.void'],
   admin: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'],
   storekeeper: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'],
   mechanic: ['move'],
 };
+
+export const ROLES = ['owner', 'admin', 'storekeeper', 'mechanic'];
+
+export function isAdmin(role) {
+  return role === 'owner' || role === 'admin';
+}
 
 export function canWrite(role, kind) {
   return (ALLOWED[role] || []).includes(kind);

@@ -1,14 +1,79 @@
-import { useStore, canManage } from '../store.js';
+import { useState } from 'react';
+import { useStore, canManage, isOwner, recordMany } from '../store.js';
 import { locationContents, movesFor, unitLocations, normalizeCode } from '../../../shared/state.js';
 import { ScanField } from '../Scanner.jsx';
-import { Section, Message, fmtDate, fmtQty, kindName, locLabel, moveText, unitLabel, CONDITIONS } from '../ui.jsx';
+import { Section, Message, LocationSelect, fmtDate, fmtQty, kindName, locLabel, moveText, unitLabel, CONDITIONS } from '../ui.jsx';
+
+// Исправление проведённой операции (только для главного): старая отменяется, вместо неё записывается новая.
+function MoveEditor({ m, onClose }) {
+  const [qty, setQty] = useState(String(m.qty));
+  const [from, setFrom] = useState(m.from);
+  const [to, setTo] = useState(m.to);
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState(null);
+  const n = Number(String(qty).replace(',', '.'));
+  const changed = n !== m.qty || from !== m.from || to !== m.to;
+
+  async function save(cancelOnly) {
+    setErr(null);
+    try {
+      const ops = [{ kind: 'move.void', payload: { moveId: m.id, reason: reason.trim() } }];
+      if (!cancelOnly) {
+        const { id, seq, createdAt, userId, userName, voided, ...rest } = m;
+        ops.push({ kind: 'move', payload: { ...rest, qty: n, from, to, corrects: id } });
+      }
+      await recordMany(ops);
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  return (
+    <div className="subcard">
+      <div className="grid3">
+        <label className="field">
+          Количество
+          <input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="decimal" />
+        </label>
+        <div className="field">
+          <div className="label">Откуда</div>
+          <LocationSelect value={from} onChange={setFrom} placeholder="— ниоткуда —" />
+        </div>
+        <div className="field">
+          <div className="label">Куда</div>
+          <LocationSelect value={to} onChange={setTo} placeholder="— никуда —" />
+        </div>
+      </div>
+      <label className="field">
+        Причина*
+        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Например: ошиблись Газелью" />
+      </label>
+      {err && <Message kind="error">{err}</Message>}
+      <div className="row wrap">
+        <button className="btn primary small" disabled={!reason.trim() || !changed || !(n > 0) || (!from && !to)} onClick={() => save(false)}>
+          Сохранить исправление
+        </button>
+        <button className="btn small" disabled={!reason.trim()} onClick={() => save(true)}>
+          Отменить операцию
+        </button>
+        <button className="btn ghost small" onClick={onClose}>
+          Закрыть
+        </button>
+      </div>
+      <p className="muted small">Исходная операция останется в истории зачёркнутой, с вашей причиной.</p>
+    </div>
+  );
+}
 
 function History({ moves, state, showUnit }) {
+  const owner = useStore((s) => isOwner(s.user));
+  const [editing, setEditing] = useState(null);
   if (!moves.length) return <p className="muted">Движений нет.</p>;
   return (
     <ul className="list">
       {[...moves].reverse().map((m) => (
-        <li key={m.id} className="pad">
+        <li key={m.id} className={`pad ${m.voided ? 'voided' : ''}`}>
           {showUnit && (
             <div>
               <a href={`#/scan?code=${m.unit}`}>{unitLabel(state, m.unit)}</a> <span className="muted small">{m.unit}</span>
@@ -23,7 +88,19 @@ function History({ moves, state, showUnit }) {
             {m.condition ? ` · ${CONDITIONS[m.condition]}` : ''}
             {m.comment ? ` · ${m.comment}` : ''}
             {m.seq == null && ' · не отправлено'}
+            {m.corrects && ' · исправленная запись'}
           </div>
+          {m.voided && (
+            <div className="warn-text small no-strike">
+              Отменено: {m.voided.reason} · {m.voided.userName} · {fmtDate(m.voided.createdAt)}
+            </div>
+          )}
+          {owner && !m.voided && editing !== m.id && (
+            <button className="btn ghost small" onClick={() => setEditing(m.id)}>
+              Исправить
+            </button>
+          )}
+          {editing === m.id && <MoveEditor m={m} onClose={() => setEditing(null)} />}
         </li>
       ))}
     </ul>

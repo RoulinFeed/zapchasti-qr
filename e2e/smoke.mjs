@@ -163,6 +163,15 @@ await page.getByPlaceholder('Что выяснили (необязательно
 await page.getByRole('button', { name: 'Готово' }).click();
 await page.getByText('Нестыковок нет.').waitFor();
 
+// Главный исправляет ошибочную операцию: перемещение подшипника в Газель отменяем
+await go('scan?code=P-000001');
+await page.getByRole('button', { name: 'Исправить' }).first().click();
+await page.getByPlaceholder('Например: ошиблись Газелью').fill('деталь на комбайне, перемещения не было');
+await page.getByRole('button', { name: 'Отменить операцию' }).click();
+await page.getByText(/Отменено: деталь на комбайне/).waitFor();
+await go('issues');
+await page.getByText('Остатки сходятся.').waitFor();
+
 // Тёмная тема
 await page.setViewportSize({ width: 1100, height: 800 });
 await page.locator('.side select').selectOption('dark');

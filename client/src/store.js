@@ -110,6 +110,12 @@ export async function recordMany(list) {
     if (err) throw new Error(err);
   }
   await db.ops.bulkPut(ops);
+  // Отмена меняет прошлое, поэтому состояние пересобираем целиком.
+  if (ops.some((o) => o.kind === 'move.void')) {
+    await rebuild();
+    sync();
+    return ops;
+  }
   // Быстро применяем к текущему состоянию, без полной пересборки.
   const state = snapshot.state;
   for (const op of ops) applyOp(state, op);
@@ -182,7 +188,15 @@ export async function dismissRejected(id) {
 
 // Удобные функции, которыми пользуются экраны
 export function canManage(user) {
-  return user && (user.role === 'admin' || user.role === 'storekeeper');
+  return user && ['owner', 'admin', 'storekeeper'].includes(user.role);
+}
+
+export function isAdmin(user) {
+  return user && (user.role === 'owner' || user.role === 'admin');
+}
+
+export function isOwner(user) {
+  return user?.role === 'owner';
 }
 
 export async function allocateCodes(prefix, count = 1) {

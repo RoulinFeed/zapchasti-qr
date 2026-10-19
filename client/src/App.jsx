@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useStore, sync, logout, canManage } from './store.js';
+import { useStore, sync, logout, canManage, isAdmin } from './store.js';
 import { fmtDate, navigate } from './ui.jsx';
 import Login from './screens/Login.jsx';
 import Home from './screens/Home.jsx';
@@ -87,7 +87,7 @@ export default function App() {
     manage && ['catalog', 'Каталог'],
     manage && ['locations', 'Склады, Газели, техника'],
     manage && ['labels', 'Печать этикеток'],
-    user.role === 'admin' && ['users', 'Сотрудники'],
+    isAdmin(user) && ['users', 'Сотрудники'],
     ['data', 'Выгрузка в Excel'],
     rejected.length > 0 && ['problems', `Ошибки (${rejected.length})`],
   ].filter(Boolean);
