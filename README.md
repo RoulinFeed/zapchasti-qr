@@ -59,7 +59,7 @@ cd client && npm run dev                      # приложение на :5173,
 
 ```bash
 npm test                                  # API и логика остатков (нужна база zapchasti_test)
-cd client && npm run build && cd ../e2e && npm i && node smoke.mjs http://localhost:3000
+cd client && npm run build && cd ../e2e && npm i && node smoke.mjs http://localhost:3000 && node sync.mjs http://localhost:3000
 ```
 
 `e2e/smoke.mjs` проходит в браузере весь сценарий на пустой базе: места, приход, комплектацию Газели, установку на комбайн без связи, синхронизацию, остатки, инвентаризацию, пробную загрузку из Excel.
