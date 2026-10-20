@@ -20,7 +20,16 @@ export function newToken() {
 
 // Кто какие операции может записывать
 const ALLOWED = {
-  owner: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', 'move.void'],
+  owner: [
+    'item.upsert',
+    'location.upsert',
+    'unit.bind',
+    'move',
+    'issue.resolve',
+    'move.void',
+    'item.delete',
+    'location.delete',
+  ],
   admin: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'],
   storekeeper: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'],
   mechanic: ['move'],

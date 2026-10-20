@@ -1,14 +1,26 @@
 import { useState } from 'react';
-import { useStore, record, allocateCodes } from '../store.js';
+import { useStore, record, allocateCodes, isOwner } from '../store.js';
 import { LOCATION_KINDS, CODE_PREFIX, locationContents } from '../../../shared/state.js';
 import { Section, Message } from '../ui.jsx';
 
 function LocationForm({ loc, onDone }) {
-  const { online, users } = useStore();
+  const { online, users, state, user } = useStore();
   const [f, setF] = useState({ kind: 'machine', name: '', model: '', invNo: '', note: '', userId: '', ...loc });
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  async function remove() {
+    const left = locationContents(state, loc.code).length;
+    if (left > 0) return setErr(`Удалить нельзя: здесь по учёту ещё ${left} поз. Сначала переместите или спишите их.`);
+    if (!confirm(`Удалить «${loc.name}» насовсем? В старых записях журнала название останется.`)) return;
+    try {
+      await record('location.delete', { code: loc.code });
+      onDone();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -96,6 +108,11 @@ function LocationForm({ loc, onDone }) {
         <button className="btn" onClick={onDone}>
           Отмена
         </button>
+        {loc?.archived && isOwner(user) && (
+          <button className="btn danger" onClick={remove}>
+            Удалить насовсем
+          </button>
+        )}
       </div>
     </Section>
   );
@@ -108,7 +125,7 @@ export default function Locations({ params, navigate }) {
       <LocationForm loc={params.code ? state.locations[params.code] : null} onDone={() => navigate('/locations')} />
     );
   }
-  const all = Object.values(state.locations);
+  const all = Object.values(state.locations).filter((l) => !l.deleted);
   return (
     <>
       <Section

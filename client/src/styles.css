@@ -147,6 +147,11 @@ textarea:focus {
   border-color: transparent;
   color: var(--primary);
 }
+.btn.danger {
+  color: var(--error);
+  border-color: var(--error);
+  margin-left: auto;
+}
 .btn.small {
   min-height: 34px;
   padding: 4px 10px;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useStore, record, recordMany, uid } from '../store.js';
+import { useStore, record, recordMany, uid, isOwner } from '../store.js';
 import { itemTotals } from '../../../shared/state.js';
 import { Section, Message, fmtDate, fmtQty, searchItems } from '../ui.jsx';
 import { PhotoInput, Thumb } from '../photo.jsx';
@@ -24,6 +24,7 @@ const toNum = (v) =>
   ) || 0;
 
 function ItemForm({ item, onDone }) {
+  const { state, user } = useStore();
   const [f, setF] = useState({ tracking: 'piece', unitName: 'шт', minQty: 0, ...item });
   const [err, setErr] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -37,6 +38,20 @@ function ItemForm({ item, onDone }) {
         price: toNum(f.price),
       };
       await record('item.upsert', payload);
+      onDone();
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+  async function remove() {
+    const left = itemTotals(state)[item.id]?.total || 0;
+    if (left > 0)
+      return setErr(
+        `Удалить нельзя: по учёту ещё ${fmtQty(left, item)} на складах и в Газелях. Сначала спишите остаток.`,
+      );
+    if (!confirm(`Удалить «${item.name}» из архива насовсем? В старых записях журнала название останется.`)) return;
+    try {
+      await record('item.delete', { id: item.id });
       onDone();
     } catch (e) {
       setErr(e.message);
@@ -74,6 +89,11 @@ function ItemForm({ item, onDone }) {
         <button className="btn" onClick={onDone}>
           Отмена
         </button>
+        {item?.archived && isOwner(user) && (
+          <button className="btn danger" onClick={remove}>
+            Удалить из архива
+          </button>
+        )}
       </div>
     </Section>
   );
@@ -312,7 +332,9 @@ export default function Catalog({ params, navigate }) {
   }
   if (importing) return <Import onDone={() => setImporting(false)} />;
 
-  const list = showArchived ? Object.values(state.items).filter((i) => i.archived) : searchItems(state.items, q);
+  const list = showArchived
+    ? Object.values(state.items).filter((i) => i.archived && !i.deleted)
+    : searchItems(state.items, q);
 
   return (
     <>

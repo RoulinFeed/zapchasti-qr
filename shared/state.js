@@ -1,7 +1,16 @@
 // Общая логика сервера и приложения: состояние склада собирается из журнала операций.
 // Операции только добавляются, поэтому одинаковый журнал всегда даёт одинаковое состояние.
 
-export const OP_KINDS = ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', 'move.void'];
+export const OP_KINDS = [
+  'item.upsert',
+  'location.upsert',
+  'unit.bind',
+  'move',
+  'issue.resolve',
+  'move.void',
+  'item.delete',
+  'location.delete',
+];
 
 export const MOVE_TYPES = {
   receipt: 'Приход',
@@ -49,7 +58,9 @@ export function emptyState() {
 }
 
 export function normalizeCode(raw) {
-  return String(raw || '').trim().toUpperCase();
+  return String(raw || '')
+    .trim()
+    .toUpperCase();
 }
 
 // Проверка формы операции. Возвращает текст ошибки или null.
@@ -88,6 +99,12 @@ export function validateOp(op) {
       if (!p.moveId) return 'не указана операция';
       if (!String(p.reason || '').trim()) return 'укажите причину исправления';
       return null;
+    case 'item.delete':
+      if (!p.id) return 'не указана позиция';
+      return null;
+    case 'location.delete':
+      if (!p.code) return 'не указано место';
+      return null;
   }
   return null;
 }
@@ -121,6 +138,18 @@ export function applyOp(state, op) {
       state.locations[code] = { ...(state.locations[code] || {}), ...p, code };
       break;
     }
+    // Удаление из архива: запись остаётся, чтобы в старых движениях было видно название, но больше нигде не показывается.
+    case 'item.delete': {
+      const it = state.items[p.id];
+      if (it) state.items[p.id] = { ...it, archived: true, deleted: true };
+      break;
+    }
+    case 'location.delete': {
+      const code = normalizeCode(p.code);
+      const l = state.locations[code];
+      if (l) state.locations[code] = { ...l, archived: true, deleted: true };
+      break;
+    }
     case 'unit.bind': {
       const code = normalizeCode(p.code);
       const prev = state.units[code];
@@ -143,7 +172,17 @@ export function applyOp(state, op) {
         if (p.condition && state.units[unit]) state.units[unit].condition = p.condition;
       }
       for (const kind of issues) {
-        state.issues.push({ moveId: op.id, kind, unit, from, to, qty, type: p.type, createdAt: op.createdAt, userName: op.userName });
+        state.issues.push({
+          moveId: op.id,
+          kind,
+          unit,
+          from,
+          to,
+          qty,
+          type: p.type,
+          createdAt: op.createdAt,
+          userName: op.userName,
+        });
       }
       state.moves.push({
         id: op.id,

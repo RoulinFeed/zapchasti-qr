@@ -199,6 +199,16 @@ test('администратор: исправляет и отменяет оп�
   assert.equal(after.stock['P-000001']['W-001'] ?? 0, 0);
   const m = after.moves.find((x) => x.id === wrong.id);
   assert.equal(m.voided.reason, 'ошиблись складом');
+
+  // удаление из архива: только администратор; название остаётся в истории
+  const itemId = after.units['P-000001'].itemId;
+  const del = op('item.delete', { id: itemId });
+  assert.equal((await call(admin.token, 'POST', '/api/sync', { ops: [del] })).json().results[0].status, 'rejected');
+  const delRes = (await call(token, 'POST', '/api/sync', { ops: [del], since: 0 })).json();
+  assert.equal(delRes.results[0].status, 'ok');
+  const gone = buildState(delRes.ops);
+  assert.ok(gone.items[itemId].deleted && gone.items[itemId].archived);
+  assert.ok(gone.items[itemId].name);
 });
 
 test('первый руководитель старой базы становится администратором', async () => {

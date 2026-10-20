@@ -156,6 +156,14 @@ await page.getByText('Ремень вариатора').waitFor();
 await page.getByRole('button', { name: 'Удалить загрузку' }).click();
 await page.getByText('Ремень вариатора').waitFor({ state: 'detached' });
 
+// Администратор удаляет позицию из архива насовсем
+await page.getByLabel('Показать архив').check();
+await page.getByText('Ремень вариатора').click();
+await page.getByRole('button', { name: 'Удалить из архива' }).click();
+await page.getByLabel('Показать архив').check();
+await page.getByText('Фильтр масляный').waitFor();
+assert.equal(await page.getByText('Ремень вариатора').count(), 0);
+
 // Затраты: подшипник поставлен по цене 1250,50
 await go('costs');
 await page.locator('.big-number').first().getByText(/1\s251 ₽/).waitFor();
