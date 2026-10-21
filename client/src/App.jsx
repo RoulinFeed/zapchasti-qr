@@ -18,6 +18,23 @@ import Issues from './screens/Issues.jsx';
 import Costs from './screens/Costs.jsx';
 import { openIssues } from '../../shared/state.js';
 import { ThemeSwitch } from './theme.jsx';
+import {
+  House,
+  QrCode,
+  Boxes,
+  PackagePlus,
+  ClipboardCheck,
+  TriangleAlert,
+  Wallet,
+  BookOpen,
+  Warehouse,
+  Printer,
+  Users as UsersIcon,
+  FileSpreadsheet,
+  CircleAlert,
+  LogOut,
+  Wrench,
+} from 'lucide-react';
 
 const ROUTES = {
   '': Home,
@@ -35,6 +52,9 @@ const ROUTES = {
   issues: Issues,
   costs: Costs,
 };
+
+// Экраны с широкими таблицами занимают всю ширину окна.
+const WIDE = ['catalog', 'stock'];
 
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, '');
@@ -76,49 +96,64 @@ export default function App() {
 
   const Screen = ROUTES[route.name] || Home;
   const manage = canManage(user);
+  const issues = manage ? openIssues(state).length : 0;
+  // [путь, подпись, иконка, счётчик]
   const links = [
-    ['', 'Главная'],
-    ['scan', 'Найти по QR'],
-    ['stock', 'Остатки'],
-    manage && ['receive', 'Приход'],
-    manage && ['inventory', 'Инвентаризация'],
-    manage && ['issues', `Нестыковки${openIssues(state).length ? ` (${openIssues(state).length})` : ''}`],
-    manage && ['costs', 'Затраты'],
-    manage && ['catalog', 'Каталог'],
-    manage && ['locations', 'Склады, Газели, техника'],
-    manage && ['labels', 'Печать этикеток'],
-    isAdmin(user) && ['users', 'Сотрудники'],
-    ['data', 'Выгрузка в Excel'],
-    rejected.length > 0 && ['problems', `Ошибки (${rejected.length})`],
+    ['', 'Главная', House],
+    ['scan', 'Найти по QR', QrCode],
+    ['stock', 'Остатки', Boxes],
+    manage && ['receive', 'Приход', PackagePlus],
+    manage && ['inventory', 'Инвентаризация', ClipboardCheck],
+    manage && ['issues', 'Нестыковки', TriangleAlert, issues],
+    manage && ['costs', 'Затраты', Wallet],
+    manage && ['catalog', 'Каталог', BookOpen],
+    manage && ['locations', 'Склады, Газели, техника', Warehouse],
+    manage && ['labels', 'Печать этикеток', Printer],
+    isAdmin(user) && ['users', 'Сотрудники', UsersIcon],
+    ['data', 'Выгрузка в Excel', FileSpreadsheet],
+    rejected.length > 0 && ['problems', 'Ошибки', CircleAlert, rejected.length],
   ].filter(Boolean);
 
   return (
     <div className="app">
-      <header className="top">
-        <button className="btn ghost menu-btn" onClick={() => setMenu(!menu)} aria-label="Меню">
-          ☰
-        </button>
-        <a className="brand" href="#/">
-          Запчасти
+      <nav className={`side ${menu ? 'open' : ''}`}>
+        <a className="side-brand" href="#/" title="Запчасти">
+          <span className="side-logo">
+            <Wrench size={14} strokeWidth={2.2} />
+          </span>
+          <span className="label">Запчасти</span>
         </a>
-        <SyncBadge />
-      </header>
-      <div className="layout">
-        <nav className={`side ${menu ? 'open' : ''}`}>
-          {links.map(([path, label]) => (
-            <a key={path} href={`#/${path}`} className={route.name === path ? 'active' : ''}>
-              {label}
-            </a>
-          ))}
-          <div className="side-user">
-            <ThemeSwitch />
-            <div>{user.name}</div>
-            <button className="btn ghost small" onClick={() => logout().catch((e) => alert(e.message))}>
-              Выйти
-            </button>
-          </div>
-        </nav>
-        <main className="main">
+        {links.map(([path, label, Icon, count]) => (
+          <a key={path} href={`#/${path}`} className={route.name === path ? 'active' : ''} title={label}>
+            <Icon size={20} strokeWidth={1.8} />
+            <span className="label">{label}</span>
+            {count > 0 && <span className="count">{count}</span>}
+          </a>
+        ))}
+        <div className="side-user">
+          <ThemeSwitch />
+          <button
+            className="side-item"
+            title={`Выйти (${user.name})`}
+            onClick={() => logout().catch((e) => alert(e.message))}
+          >
+            <LogOut size={20} strokeWidth={1.8} />
+            <span className="label">Выйти · {user.name}</span>
+          </button>
+        </div>
+      </nav>
+      {menu && <div className="side-shade" onClick={() => setMenu(false)} />}
+      <div className="shell">
+        <header className="top">
+          <button className="btn ghost menu-btn" onClick={() => setMenu(!menu)} aria-label="Меню">
+            ☰
+          </button>
+          <a className="brand" href="#/">
+            Запчасти
+          </a>
+          <SyncBadge />
+        </header>
+        <main className={`main ${WIDE.includes(route.name) ? 'wide' : ''}`}>
           <Screen key={window.location.hash} args={route.args} params={route.params} navigate={navigate} />
         </main>
       </div>

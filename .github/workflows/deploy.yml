@@ -1,0 +1,34 @@
+# Обновление сервера после каждой загрузки в main.
+# Нужны секреты репозитория (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST — адрес сервера, DEPLOY_USER — пользователь, DEPLOY_KEY — закрытый SSH-ключ,
+#   DEPLOY_PATH — папка проекта на сервере (где лежит docker-compose.yml).
+# Пока секретов нет, шаг просто пропускается.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Обновить сервер
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_KEY }}
+          DIR: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$KEY" ]; then
+            echo "Секреты DEPLOY_* не заданы, обновление пропущено"
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=accept-new "$USER@$HOST" \
+            "cd '${DIR:-~/zapchasti-qr}' && git pull --ff-only && docker compose up -d --build && docker compose ps"

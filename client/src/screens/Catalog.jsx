@@ -3,6 +3,87 @@ import { useStore, record, recordMany, uid, isOwner } from '../store.js';
 import { itemTotals } from '../../../shared/state.js';
 import { Section, Message, fmtDate, fmtQty, searchItems } from '../ui.jsx';
 import { PhotoInput, Thumb } from '../photo.jsx';
+import { Grid } from '../Grid.jsx';
+import { fmtMoney } from './Costs.jsx';
+
+const VIEW_KEY = 'zapchasti.catalogView';
+function readView() {
+  try {
+    return localStorage.getItem(VIEW_KEY) || (window.innerWidth >= 900 ? 'table' : 'list');
+  } catch {
+    return 'list';
+  }
+}
+
+// Каталог таблицей: правка прямо в ячейках, как в Excel.
+function CatalogGrid({ items, totals, navigate }) {
+  const [err, setErr] = useState(null);
+  const num = (r, k) => Number(r[k]) || 0;
+  const columns = [
+    { key: 'photo', title: '', width: 44, render: (r) => <Thumb id={r.photo} size={28} />, value: () => '' },
+    { key: 'name', title: 'Название', width: 260, editable: true },
+    { key: 'sku', title: 'Артикул', width: 130, editable: true },
+    { key: 'manufacturer', title: 'Производитель', width: 130, editable: true },
+    { key: 'models', title: 'Модели техники', width: 160, editable: true },
+    { key: 'tracking', title: 'Учёт', width: 90, value: (r) => (r.tracking === 'batch' ? 'партией' : 'поштучно') },
+    { key: 'unitName', title: 'Ед.', width: 60, editable: true },
+    { key: 'minQty', title: 'Мин.', width: 70, align: 'right', editable: true, value: (r) => num(r, 'minQty') || '' },
+    {
+      key: 'price',
+      title: 'Цена, ₽',
+      width: 100,
+      align: 'right',
+      editable: true,
+      value: (r) => num(r, 'price') || '',
+      render: (r) => (num(r, 'price') ? num(r, 'price').toLocaleString('ru-RU') : ''),
+    },
+    { key: 'stock', title: 'Запас', width: 80, align: 'right', value: (r) => totals[r.id]?.total || 0 },
+    {
+      key: 'value',
+      title: 'Сумма',
+      width: 110,
+      align: 'right',
+      value: (r) => (totals[r.id]?.total || 0) * num(r, 'price'),
+      render: (r) => {
+        const v = (totals[r.id]?.total || 0) * num(r, 'price');
+        return v ? fmtMoney(v) : '';
+      },
+    },
+    { key: 'note', title: 'Заметка', width: 180, editable: true },
+  ];
+
+  async function onEdit(row, changes) {
+    setErr(null);
+    const fixed = { ...changes };
+    for (const k of NUMERIC) if (k in fixed) fixed[k] = toNum(fixed[k]);
+    if ('name' in fixed) fixed.name = String(fixed.name).trim();
+    const payload = row ? { ...row, ...fixed } : { id: uid(), tracking: 'piece', unitName: 'шт', minQty: 0, ...fixed };
+    if (!payload.name)
+      return setErr(row ? 'Название не может быть пустым.' : 'Для новой позиции сначала впишите название.');
+    try {
+      await record('item.upsert', payload);
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
+  return (
+    <>
+      {err && <Message kind="error">{err}</Message>}
+      <Grid
+        columns={columns}
+        rows={items}
+        onEdit={onEdit}
+        onOpen={(r) => navigate(`/catalog?id=${r.id}`)}
+        rowClass={(r) => (Number(r.minQty) > 0 && (totals[r.id]?.total || 0) < Number(r.minQty) ? 'low' : '')}
+      />
+      <p className="muted small">
+        Стрелки и Tab — переход, Enter или просто начните печатать — правка, Esc — отмена. Можно копировать и вставлять
+        блоки из Excel (Ctrl+C, Ctrl+V). Двойной щелчок по фото или запасу открывает карточку позиции.
+      </p>
+    </>
+  );
+}
 
 const FIELDS = [
   ['name', 'Название*'],
@@ -325,6 +406,15 @@ export default function Catalog({ params, navigate }) {
   const [q, setQ] = useState('');
   const [importing, setImporting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [view, setViewState] = useState(readView);
+  const setView = (v) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* не важно */
+    }
+  };
   const totals = useMemo(() => itemTotals(state), [state]);
 
   if (params.id !== undefined) {
@@ -348,6 +438,14 @@ export default function Catalog({ params, navigate }) {
             <button className="btn small" onClick={() => setImporting(true)}>
               Загрузить из Excel
             </button>
+            <div className="switch">
+              <button className={view === 'table' ? 'on' : ''} onClick={() => setView('table')}>
+                Таблица
+              </button>
+              <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>
+                Карточки
+              </button>
+            </div>
           </div>
         }
       >
@@ -356,27 +454,31 @@ export default function Catalog({ params, navigate }) {
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Показать
           архив
         </label>
-        <ul className="list">
-          {list.slice(0, 300).map((it) => (
-            <li key={it.id}>
-              <a className="list-btn row-btn" href={`#/catalog?id=${it.id}`}>
-                <Thumb id={it.photo} />
-                <span className="grow">
-                  <b>{it.name}</b>
-                  <span className="muted block">
-                    {[
-                      it.sku,
-                      it.tracking === 'batch' ? 'партией' : 'поштучно',
-                      `запас ${fmtQty(totals[it.id]?.total || 0, it)}`,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
+        {view === 'table' ? (
+          <CatalogGrid items={list} totals={totals} navigate={navigate} />
+        ) : (
+          <ul className="list">
+            {list.slice(0, 300).map((it) => (
+              <li key={it.id}>
+                <a className="list-btn row-btn" href={`#/catalog?id=${it.id}`}>
+                  <Thumb id={it.photo} />
+                  <span className="grow">
+                    <b>{it.name}</b>
+                    <span className="muted block">
+                      {[
+                        it.sku,
+                        it.tracking === 'batch' ? 'партией' : 'поштучно',
+                        `запас ${fmtQty(totals[it.id]?.total || 0, it)}`,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
                   </span>
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
       <ImportBatches />
     </>

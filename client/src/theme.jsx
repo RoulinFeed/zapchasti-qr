@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Sun, Moon, Monitor } from 'lucide-react';
 
 const KEY = 'zapchasti.theme';
 const OPTIONS = { light: 'Светлая', dark: 'Тёмная', auto: 'Как в системе' };
@@ -17,6 +18,10 @@ export function applyTheme(mode = read()) {
   else root.setAttribute('data-theme', mode);
 }
 
+const NEXT = { auto: 'light', light: 'dark', dark: 'auto' };
+const ICONS = { light: Sun, dark: Moon, auto: Monitor };
+
+// Кнопка в меню: по нажатию тема меняется по кругу — светлая, тёмная, как в системе.
 export function ThemeSwitch() {
   const [mode, setMode] = useState(read);
   useEffect(() => {
@@ -27,16 +32,16 @@ export function ThemeSwitch() {
       /* не важно */
     }
   }, [mode]);
+  const Icon = ICONS[mode];
   return (
-    <label className="field small">
-      Тема
-      <select value={mode} onChange={(e) => setMode(e.target.value)}>
-        {Object.entries(OPTIONS).map(([k, v]) => (
-          <option key={k} value={k}>
-            {v}
-          </option>
-        ))}
-      </select>
-    </label>
+    <button
+      className="side-item theme-switch"
+      data-mode={mode}
+      title={`Тема: ${OPTIONS[mode]}. Нажмите, чтобы сменить`}
+      onClick={() => setMode(NEXT[mode])}
+    >
+      <Icon size={20} strokeWidth={1.8} />
+      <span className="label">Тема: {OPTIONS[mode]}</span>
+    </button>
   );
 }

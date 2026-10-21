@@ -198,10 +198,38 @@ await page.getByText('Остатки сходятся.').waitFor();
 
 // Тёмная тема
 await page.setViewportSize({ width: 1100, height: 800 });
-await page.locator('.side select').selectOption('dark');
+await page.locator('.side .theme-switch').click();
+await page.locator('.side .theme-switch').click();
 assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
 await go('');
 await shot('10-dark');
+
+// Каталог таблицей, как в Excel: правка в ячейке, новая строка, вставка блока
+await page.setViewportSize({ width: 1280, height: 800 });
+await page.evaluate(() => localStorage.removeItem('zapchasti.catalogView'));
+await go('catalog');
+await page.locator('.grid').waitFor();
+const boltRow = page.locator('.grid tr', { hasText: 'Болт М10х40' });
+await boltRow.locator('td').nth(2).click();
+await page.keyboard.type('DIN 933');
+await page.keyboard.press('Enter');
+await boltRow.getByText('DIN 933').waitFor();
+await page.locator('.grid tr.grid-new td').nth(1).click();
+// Enter открывает ячейку (playwright вводит кириллицу без нажатий клавиш, поэтому сначала открываем правку)
+await page.keyboard.press('Enter');
+await page.keyboard.type('Шайба 10');
+await page.keyboard.press('Tab');
+await page.locator('.grid tr', { hasText: 'Шайба 10' }).first().waitFor();
+// вставка из Excel: две строки, название и артикул
+await page.locator('.grid tr.grid-new td').nth(1).click();
+await page.evaluate(() => {
+  const dt = new DataTransfer();
+  dt.setData('text/plain', 'Сальник 45х62\tSL-4562\nЦепь приводная\t08B-1\n');
+  document.querySelector('.grid-wrap').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
+});
+await page.locator('.grid tr', { hasText: 'SL-4562' }).waitFor();
+await page.locator('.grid tr', { hasText: '08B-1' }).waitFor();
+await shot('11-catalog-grid');
 await page.setViewportSize({ width: 390, height: 844 });
 
 // Сервер видит всё
