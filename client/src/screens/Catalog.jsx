@@ -4,16 +4,8 @@ import { itemTotals } from '../../../shared/state.js';
 import { Section, Message, fmtDate, fmtQty, searchItems } from '../ui.jsx';
 import { PhotoInput, Thumb } from '../photo.jsx';
 import { Grid } from '../Grid.jsx';
+import { useView, ViewSwitch } from '../views.jsx';
 import { fmtMoney } from './Costs.jsx';
-
-const VIEW_KEY = 'zapchasti.catalogView';
-function readView() {
-  try {
-    return localStorage.getItem(VIEW_KEY) || (window.innerWidth >= 900 ? 'table' : 'list');
-  } catch {
-    return 'list';
-  }
-}
 
 // Каталог таблицей: правка прямо в ячейках, как в Excel.
 function CatalogGrid({ items, totals, navigate }) {
@@ -406,15 +398,8 @@ export default function Catalog({ params, navigate }) {
   const [q, setQ] = useState('');
   const [importing, setImporting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [view, setViewState] = useState(readView);
-  const setView = (v) => {
-    setViewState(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      /* не важно */
-    }
-  };
+  const [view, setView] = useView('catalog');
+
   const totals = useMemo(() => itemTotals(state), [state]);
 
   if (params.id !== undefined) {
@@ -438,14 +423,7 @@ export default function Catalog({ params, navigate }) {
             <button className="btn small" onClick={() => setImporting(true)}>
               Загрузить из Excel
             </button>
-            <div className="switch">
-              <button className={view === 'table' ? 'on' : ''} onClick={() => setView('table')}>
-                Таблица
-              </button>
-              <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>
-                Карточки
-              </button>
-            </div>
+            <ViewSwitch view={view} setView={setView} />
           </div>
         }
       >

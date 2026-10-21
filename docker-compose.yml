@@ -11,6 +11,7 @@ services:
 
   app:
     build: .
+    image: zapchasti-qr-app
     restart: unless-stopped
     depends_on: [db]
     environment:

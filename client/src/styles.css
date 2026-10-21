@@ -1042,3 +1042,20 @@ textarea:focus {
 .grid tr.grid-new td {
   background: transparent;
 }
+.grid tr.muted td {
+  color: var(--muted);
+}
+.grid tr.voided-row td {
+  text-decoration: line-through;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filters input {
+  flex: 1 1 240px;
+}
+.filters select {
+  flex: 0 1 220px;
+}

@@ -206,7 +206,7 @@ await shot('10-dark');
 
 // Каталог таблицей, как в Excel: правка в ячейке, новая строка, вставка блока
 await page.setViewportSize({ width: 1280, height: 800 });
-await page.evaluate(() => localStorage.removeItem('zapchasti.catalogView'));
+await page.evaluate(() => localStorage.removeItem('zapchasti.view.catalog'));
 await go('catalog');
 await page.locator('.grid').waitFor();
 const boltRow = page.locator('.grid tr', { hasText: 'Болт М10х40' });
@@ -230,6 +230,17 @@ await page.evaluate(() => {
 await page.locator('.grid tr', { hasText: 'SL-4562' }).waitFor();
 await page.locator('.grid tr', { hasText: '08B-1' }).waitFor();
 await shot('11-catalog-grid');
+
+// Таблица и карточки в других разделах
+await go('journal');
+await page.locator('.grid tr', { hasText: 'Акрос 595 №7' }).first().waitFor();
+await shot('12-journal-table');
+await page.getByRole('button', { name: 'Карточки' }).click();
+await page.locator('li.move').first().waitFor();
+await go('locations');
+await page.locator('.grid tr', { hasText: 'Газель 1' }).waitFor();
+await go('stock?tab=items');
+await page.locator('.grid tr', { hasText: 'Болт М10х40' }).waitFor();
 await page.setViewportSize({ width: 390, height: 844 });
 
 // Сервер видит всё

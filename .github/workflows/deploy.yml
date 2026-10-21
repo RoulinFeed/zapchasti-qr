@@ -1,8 +1,10 @@
 # Обновление сервера после каждой загрузки в main.
+# Образ собирается здесь, на GitHub: на небольшом сервере сборка съедает всю память и подвешивает его.
+# Готовый образ передаётся на сервер по SSH, там остаётся только перезапустить контейнер.
 # Нужны секреты репозитория (Settings → Secrets and variables → Actions):
 #   DEPLOY_HOST — адрес сервера, DEPLOY_USER — пользователь, DEPLOY_KEY — закрытый SSH-ключ,
 #   DEPLOY_PATH — папка проекта на сервере (где лежит docker-compose.yml).
-# Пока секретов нет, шаг просто пропускается.
+# Пока секретов нет, обновление пропускается.
 name: deploy
 
 on:
@@ -15,20 +17,49 @@ concurrency: deploy
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+      USER: ${{ secrets.DEPLOY_USER }}
+      KEY: ${{ secrets.DEPLOY_KEY }}
+      DIR: ${{ secrets.DEPLOY_PATH }}
     steps:
-      - name: Обновить сервер
-        env:
-          HOST: ${{ secrets.DEPLOY_HOST }}
-          USER: ${{ secrets.DEPLOY_USER }}
-          KEY: ${{ secrets.DEPLOY_KEY }}
-          DIR: ${{ secrets.DEPLOY_PATH }}
+      - name: Проверить секреты
+        id: check
         run: |
           if [ -z "$HOST" ] || [ -z "$KEY" ]; then
             echo "Секреты DEPLOY_* не заданы, обновление пропущено"
-            exit 0
+            echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != '1'
+
+      - name: Собрать образ
+        if: steps.check.outputs.skip != '1'
+        run: docker build -t zapchasti-qr-app:latest .
+
+      - name: Подключиться к серверу
+        if: steps.check.outputs.skip != '1'
+        run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
-          ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=accept-new "$USER@$HOST" \
-            "cd '${DIR:-~/zapchasti-qr}' && git pull --ff-only && docker compose up -d --build && docker compose ps"
+          cat > ~/.ssh/config <<CFG
+          Host server
+            HostName $HOST
+            User $USER
+            IdentityFile ~/.ssh/deploy
+            StrictHostKeyChecking accept-new
+            ServerAliveInterval 20
+            ServerAliveCountMax 15
+          CFG
+          ssh server true
+
+      - name: Передать образ на сервер
+        if: steps.check.outputs.skip != '1'
+        run: docker save zapchasti-qr-app:latest | gzip -1 | ssh server 'gunzip | docker load'
+
+      - name: Перезапустить приложение
+        if: steps.check.outputs.skip != '1'
+        run: |
+          ssh server "cd '${DIR:-~/zapchasti-qr}' && git pull --ff-only && docker compose up -d --no-build && docker image prune -f && docker compose ps"

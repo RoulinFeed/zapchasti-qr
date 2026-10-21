@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useStore, isOwner } from '../store.js';
 import { Section, Message } from '../ui.jsx';
+import { Grid } from '../Grid.jsx';
+import { useView, ViewSwitch } from '../views.jsx';
 
 const ROLES = { owner: 'Администратор', admin: 'Руководитель', storekeeper: 'Кладовщик', mechanic: 'Механик' };
 
@@ -54,8 +56,8 @@ function UserForm({ user, onDone }) {
       )}
       <p className="muted small">
         Механик может перемещать, ставить и снимать детали. Кладовщик ещё делает приход, инвентаризацию и ведёт каталог.
-        Руководитель управляет сотрудниками. Администратор может ещё исправлять и отменять проведённые операции в журнале и
-        назначать других администраторов.
+        Руководитель управляет сотрудниками. Администратор может ещё исправлять и отменять проведённые операции в
+        журнале и назначать других администраторов.
       </p>
       {err && <Message kind="error">{err}</Message>}
       <div className="row">
@@ -74,6 +76,7 @@ export default function Users() {
   const [users, setUsers] = useState(null);
   const [edit, setEdit] = useState(undefined);
   const [err, setErr] = useState(null);
+  const [view, setView] = useView('users');
   const load = () =>
     api('/api/users')
       .then((r) => setUsers(r.users))
@@ -87,25 +90,45 @@ export default function Users() {
     <Section
       title="Сотрудники"
       actions={
-        <button className="btn primary small" onClick={() => setEdit(null)}>
-          + Сотрудник
-        </button>
+        <div className="row">
+          <button className="btn primary small" onClick={() => setEdit(null)}>
+            + Сотрудник
+          </button>
+          <ViewSwitch view={view} setView={setView} />
+        </div>
       }
     >
       {err && <Message kind="error">{err} Список сотрудников доступен только при связи с сервером.</Message>}
-      <ul className="list">
-        {(users || []).map((u) => (
-          <li key={u.id}>
-            <button className="list-btn" onClick={() => setEdit(u)}>
-              <b className={u.active ? '' : 'muted'}>{u.name}</b>
-              <span className="muted">
-                {ROLES[u.role]} · {u.login}
-                {!u.active && ' · доступ закрыт'}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {view === 'table' ? (
+        <Grid
+          newRow={false}
+          rows={users || []}
+          onEdit={() => {}}
+          onOpen={(u) => setEdit(u)}
+          rowClass={(u) => (u.active ? '' : 'muted')}
+          columns={[
+            { key: 'name', title: 'Имя', width: 220 },
+            { key: 'login', title: 'Логин', width: 140 },
+            { key: 'role', title: 'Роль', width: 150, value: (u) => ROLES[u.role] },
+            { key: 'active', title: 'Доступ', width: 130, value: (u) => (u.active ? 'есть' : 'закрыт') },
+          ]}
+        />
+      ) : (
+        <ul className="list">
+          {(users || []).map((u) => (
+            <li key={u.id}>
+              <button className="list-btn" onClick={() => setEdit(u)}>
+                <b className={u.active ? '' : 'muted'}>{u.name}</b>
+                <span className="muted">
+                  {ROLES[u.role]} · {u.login}
+                  {!u.active && ' · доступ закрыт'}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {view === 'table' && <p className="muted small">Двойной щелчок или Enter открывает сотрудника для правки.</p>}
     </Section>
   );
 }

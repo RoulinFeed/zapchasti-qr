@@ -16,6 +16,7 @@ import Data from './screens/Data.jsx';
 import Problems from './screens/Problems.jsx';
 import Issues from './screens/Issues.jsx';
 import Costs from './screens/Costs.jsx';
+import Journal from './screens/Journal.jsx';
 import { openIssues } from '../../shared/state.js';
 import { ThemeSwitch } from './theme.jsx';
 import {
@@ -34,6 +35,7 @@ import {
   CircleAlert,
   LogOut,
   Wrench,
+  ScrollText,
 } from 'lucide-react';
 
 const ROUTES = {
@@ -51,10 +53,11 @@ const ROUTES = {
   problems: Problems,
   issues: Issues,
   costs: Costs,
+  journal: Journal,
 };
 
 // Экраны с широкими таблицами занимают всю ширину окна.
-const WIDE = ['catalog', 'stock'];
+const WIDE = ['catalog', 'stock', 'journal', 'locations', 'users'];
 
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, '');
@@ -102,6 +105,7 @@ export default function App() {
     ['', 'Главная', House],
     ['scan', 'Найти по QR', QrCode],
     ['stock', 'Остатки', Boxes],
+    ['journal', 'Журнал движений', ScrollText],
     manage && ['receive', 'Приход', PackagePlus],
     manage && ['inventory', 'Инвентаризация', ClipboardCheck],
     manage && ['issues', 'Нестыковки', TriangleAlert, issues],

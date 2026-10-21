@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useStore, record, allocateCodes, isOwner } from '../store.js';
 import { LOCATION_KINDS, CODE_PREFIX, locationContents } from '../../../shared/state.js';
-import { Section, Message } from '../ui.jsx';
+import { Section, Message, kindName } from '../ui.jsx';
+import { Grid } from '../Grid.jsx';
+import { useView, ViewSwitch } from '../views.jsx';
 
 function LocationForm({ loc, onDone }) {
   const { online, users, state, user } = useStore();
@@ -120,20 +122,38 @@ function LocationForm({ loc, onDone }) {
 
 export default function Locations({ params, navigate }) {
   const { state } = useStore();
+  const [view, setView] = useView('locations');
   if (params.code !== undefined) {
     return (
       <LocationForm loc={params.code ? state.locations[params.code] : null} onDone={() => navigate('/locations')} />
     );
   }
   const all = Object.values(state.locations).filter((l) => !l.deleted);
+  const save = (row, changes) => {
+    if ('name' in changes && !changes.name.trim()) return;
+    record('location.upsert', { ...row.loc, ...changes }).catch((e) => alert(e.message));
+  };
+  const rows = all
+    .map((l) => ({
+      ...l,
+      id: l.code,
+      loc: l,
+      kindName: kindName(l.kind),
+      count: locationContents(state, l.code).length,
+      status: l.archived ? 'не используется' : '',
+    }))
+    .sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, 'ru'));
   return (
     <>
       <Section
         title="Склады, Газели, техника, сотрудники"
         actions={
-          <a className="btn primary small" href="#/locations?code=">
-            + Добавить
-          </a>
+          <div className="row">
+            <a className="btn primary small" href="#/locations?code=">
+              + Добавить
+            </a>
+            <ViewSwitch view={view} setView={setView} />
+          </div>
         }
       >
         {all.length === 0 && (
@@ -142,31 +162,57 @@ export default function Locations({ params, navigate }) {
             этикеток» и наклейте: на Газель — в кузов, на комбайн — в кабину.
           </Message>
         )}
+        {view === 'table' && all.length > 0 && (
+          <>
+            <Grid
+              newRow={false}
+              rows={rows}
+              onEdit={save}
+              onOpen={(r) => navigate(`/locations?code=${r.code}`)}
+              rowClass={(r) => (r.archived ? 'muted' : '')}
+              columns={[
+                { key: 'kindName', title: 'Вид', width: 110 },
+                { key: 'name', title: 'Название', width: 220, editable: true },
+                { key: 'code', title: 'Код', width: 90 },
+                { key: 'model', title: 'Модель', width: 150, editable: true },
+                { key: 'invNo', title: 'Инв./гос. номер', width: 140, editable: true },
+                { key: 'count', title: 'Позиций', width: 80, align: 'right' },
+                { key: 'note', title: 'Заметка', width: 200, editable: true },
+                { key: 'status', title: 'Статус', width: 130 },
+              ]}
+            />
+            <p className="muted small">
+              Название, модель, номер и заметку можно править прямо в таблице. Двойной щелчок по коду открывает
+              карточку.
+            </p>
+          </>
+        )}
       </Section>
-      {Object.entries(LOCATION_KINDS).map(([kind, title]) => {
-        const list = all.filter((l) => l.kind === kind).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-        if (!list.length) return null;
-        return (
-          <Section key={kind} title={`${title} (${list.length})`}>
-            <ul className="list">
-              {list.map((l) => (
-                <li key={l.code} className="line">
-                  <a className="grow" href={`#/locations?code=${l.code}`}>
-                    <b className={l.archived ? 'muted' : ''}>{l.name}</b>{' '}
-                    <span className="muted small">
-                      {[l.code, l.model, l.invNo].filter(Boolean).join(' · ')} ·{' '}
-                      {locationContents(state, l.code).length} поз.
-                    </span>
-                  </a>
-                  <a className="btn small" href={`#/scan?code=${l.code}`}>
-                    Открыть
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </Section>
-        );
-      })}
+      {view !== 'table' &&
+        Object.entries(LOCATION_KINDS).map(([kind, title]) => {
+          const list = all.filter((l) => l.kind === kind).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+          if (!list.length) return null;
+          return (
+            <Section key={kind} title={`${title} (${list.length})`}>
+              <ul className="list">
+                {list.map((l) => (
+                  <li key={l.code} className="line">
+                    <a className="grow" href={`#/locations?code=${l.code}`}>
+                      <b className={l.archived ? 'muted' : ''}>{l.name}</b>{' '}
+                      <span className="muted small">
+                        {[l.code, l.model, l.invNo].filter(Boolean).join(' · ')} ·{' '}
+                        {locationContents(state, l.code).length} поз.
+                      </span>
+                    </a>
+                    <a className="btn small" href={`#/scan?code=${l.code}`}>
+                      Открыть
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          );
+        })}
     </>
   );
 }
