@@ -67,4 +67,4 @@ jobs:
       - name: Проверить, что приложение отвечает
         if: steps.check.outputs.skip != '1'
         run: |
-          ssh server "cd '${DIR:-~/zapchasti-qr}' && for i in \$(seq 1 20); do docker compose exec -T app wget -qO- http://localhost:3000/ >/dev/null 2>&1 && echo 'Приложение отвечает' && exit 0; sleep 3; done; docker compose logs --tail 50 app; exit 1"
+          ssh server "cd '${DIR:-~/zapchasti-qr}' && for i in \$(seq 1 20); do docker compose exec -T app wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 && echo 'Приложение отвечает' && exit 0; sleep 3; done; docker compose logs --tail 50 app; exit 1"
