@@ -1059,3 +1059,41 @@ textarea:focus {
 .filters select {
   flex: 0 1 220px;
 }
+
+/* Закупка: лучшая цена подсвечена на всю ячейку. */
+.grid td .price-cell {
+  display: block;
+  margin: 0 -8px;
+  padding: 0 8px;
+  line-height: 32px;
+}
+.price-cell.best {
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-weight: 600;
+}
+.price-cell.none {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.price-cell .small {
+  font-weight: 400;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.table td.num,
+.table th.num {
+  text-align: right;
+  white-space: nowrap;
+}
+.pu-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 6px 20px;
+  color: var(--muted);
+}
+.pu-stats b {
+  color: var(--text);
+}

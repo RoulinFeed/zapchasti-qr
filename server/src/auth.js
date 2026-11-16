@@ -19,6 +19,8 @@ export function newToken() {
 }
 
 // Кто какие операции может записывать
+const PURCHASE = ['supplier.upsert', 'purchase.upsert', 'purchase.line', 'offer.list', 'alloc.set', 'map.set'];
+
 const ALLOWED = {
   owner: [
     'item.upsert',
@@ -29,9 +31,10 @@ const ALLOWED = {
     'move.void',
     'item.delete',
     'location.delete',
+    ...PURCHASE,
   ],
-  admin: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'],
-  storekeeper: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve'],
+  admin: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', ...PURCHASE],
+  storekeeper: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', ...PURCHASE],
   mechanic: ['move'],
 };
 

@@ -1,3 +1,5 @@
+import { PURCHASE_OPS, validatePurchaseOp, applyPurchaseOp, emptyPurchaseState } from './purchase.js';
+
 // Общая логика сервера и приложения: состояние склада собирается из журнала операций.
 // Операции только добавляются, поэтому одинаковый журнал всегда даёт одинаковое состояние.
 
@@ -10,6 +12,7 @@ export const OP_KINDS = [
   'move.void',
   'item.delete',
   'location.delete',
+  ...PURCHASE_OPS,
 ];
 
 export const MOVE_TYPES = {
@@ -54,6 +57,7 @@ export function emptyState() {
     issues: [], // нестыковки, найденные при разборе журнала
     resolved: {}, // moveId -> { note, userName, createdAt } для разобранных нестыковок
     voided: {}, // moveId -> { reason, userName, createdAt, replacedBy } для отменённых операций
+    ...emptyPurchaseState(),
   };
 }
 
@@ -106,6 +110,7 @@ export function validateOp(op) {
       if (!p.code) return 'не указано место';
       return null;
   }
+  if (PURCHASE_OPS.includes(op.kind)) return validatePurchaseOp(op);
   return null;
 }
 
@@ -205,6 +210,8 @@ export function applyOp(state, op) {
     case 'issue.resolve':
       state.resolved[p.moveId] = { note: p.note || '', userName: op.userName, createdAt: op.createdAt };
       break;
+    default:
+      if (PURCHASE_OPS.includes(op.kind)) applyPurchaseOp(state, op);
   }
   return state;
 }
