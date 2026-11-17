@@ -116,7 +116,7 @@ export async function recordMany(list) {
   }
   await db.ops.bulkPut(ops);
   // Отмена меняет прошлое, поэтому состояние пересобираем целиком.
-  if (ops.some((o) => o.kind === 'move.void')) {
+  if (ops.some((o) => o.kind === 'move.void' || o.kind === 'offer.void')) {
     await rebuild();
     sync();
     return ops;

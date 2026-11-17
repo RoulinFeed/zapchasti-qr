@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useStore, record, recordMany, uid } from '../store.js';
+import { useStore, record, recordMany, uid, isAdmin } from '../store.js';
 import { lowStock, itemTotals } from '../../../shared/state.js';
 import {
   PURCHASE_STATUS,
@@ -45,6 +45,39 @@ export default function Purchase({ args, params }) {
   }
   return <PurchaseList />;
 }
+
+// Опасное действие: кнопка → поле «причина» → подтверждение. Причина попадает в журнал.
+function ConfirmReason({ label, confirmLabel, placeholder = 'Причина, например: тестовая заявка', onConfirm, small = true }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState(null);
+  if (!open)
+    return (
+      <button className={`btn danger ${small ? 'small' : ''}`} onClick={() => setOpen(true)}>
+        {label}
+      </button>
+    );
+  return (
+    <div className="confirm-reason">
+      <input autoFocus value={reason} placeholder={placeholder} onChange={(e) => setReason(e.target.value)} />
+      <div className="row">
+        <button
+          className="btn danger small"
+          disabled={!reason.trim()}
+          onClick={() => onConfirm(reason.trim()).then(() => setOpen(false), (e) => setErr(e.message))}
+        >
+          {confirmLabel}
+        </button>
+        <button className="btn small" onClick={() => (setOpen(false), setReason(''))}>
+          Отмена
+        </button>
+      </div>
+      {err && <Message kind="error">{err}</Message>}
+    </div>
+  );
+}
+
+const deletedText = (d) => `${d.userName || '?'}, ${fmtDate(d.createdAt)}${d.reason ? `: «${d.reason}»` : ''}`;
 
 // --- список заявок и поставщиков ---
 
@@ -133,14 +166,44 @@ function PurchaseList() {
             </ul>
           ))}
       </Section>
+      <DeletedPurchases />
       <Suppliers />
     </>
   );
 }
 
+// Удалённые заявки видит администратор и может вернуть их.
+function DeletedPurchases() {
+  const { state, user } = useStore();
+  if (!isAdmin(user)) return null;
+  const list = Object.values(state.purchases)
+    .filter((p) => p.deleted)
+    .sort((a, b) => String(b.deleted.createdAt).localeCompare(String(a.deleted.createdAt)));
+  if (!list.length) return null;
+  return (
+    <Section title={`Удалённые заявки (${list.length})`}>
+      <ul className="list">
+        {list.map((p) => (
+          <li key={p.id} className="line">
+            <span className="grow">
+              <b>{p.title || 'Заявка'}</b>
+              <span className="muted block small">удалил {deletedText(p.deleted)}</span>
+            </span>
+            <button className="btn small" onClick={() => record('purchase.delete', { id: p.id, restore: true })}>
+              Восстановить
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
 function Suppliers() {
-  const { state } = useStore();
+  const { state, user } = useStore();
   const [err, setErr] = useState(null);
+  const [open, setOpen] = useState(null);
+  const admin = isAdmin(user);
   const rows = Object.values(state.suppliers)
     .filter((s) => !s.archived)
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -160,13 +223,40 @@ function Suppliers() {
       <Grid
         rows={rows}
         onEdit={onEdit}
+        onOpen={(r) => setOpen(r.id)}
         columns={[
           { key: 'name', title: 'Название', width: 240, editable: true },
           { key: 'contact', title: 'Контакт: телефон, Telegram', width: 240, editable: true },
           { key: 'note', title: 'Заметка', width: 280, editable: true },
         ]}
       />
-      <p className="muted small">Поставщика можно добавить и прямо при загрузке прайса.</p>
+      <p className="muted small">
+        Поставщика можно добавить и прямо при загрузке прайса.
+        {admin && ' Чтобы удалить поставщика, выберите его в списке ниже.'}
+      </p>
+      {admin && rows.length > 0 && (
+        <div className="row">
+          <select style={{ maxWidth: 360 }} value={open || ''} onChange={(e) => setOpen(e.target.value || null)}>
+            <option value="">Удалить поставщика…</option>
+            {rows.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+          {open && state.suppliers[open] && (
+            <button
+              className="btn danger small"
+              onClick={() =>
+                confirm(`Удалить поставщика «${state.suppliers[open].name}»? Его цены в старых заявках останутся в истории.`) &&
+                record('supplier.delete', { id: open }).then(() => setOpen(null))
+              }
+            >
+              Удалить «{state.suppliers[open].name}»
+            </button>
+          )}
+        </div>
+      )}
     </Section>
   );
 }
@@ -181,7 +271,8 @@ const TABS = [
 ];
 
 function PurchaseView({ pu, tab }) {
-  const { state } = useStore();
+  const { state, user } = useStore();
+  const admin = isAdmin(user);
   const check = purchaseCheck(pu);
   const [title, setTitle] = useState(pu.title);
   const go = (t) => navigate(`/purchase/${pu.id}?tab=${t}`);
@@ -228,10 +319,34 @@ function PurchaseView({ pu, tab }) {
           ))}
         </div>
       </Section>
+      {pu.deleted && (
+        <Message kind="warn">
+          Заявка удалена: {deletedText(pu.deleted)}.{' '}
+          {admin && (
+            <button className="btn small" onClick={() => record('purchase.delete', { id: pu.id, restore: true })}>
+              Восстановить
+            </button>
+          )}
+        </Message>
+      )}
       {tab === 'lines' && <LinesTab pu={pu} />}
       {tab === 'compare' && <CompareTab pu={pu} check={check} />}
       {tab === 'orders' && <OrdersTab pu={pu} check={check} />}
       {tab === 'lists' && <ListsTab pu={pu} state={state} />}
+      {admin && !pu.deleted && (
+        <Section title="Удаление заявки">
+          <p className="muted small">
+            Заявка со всеми ценами и заказами пропадёт из списка. В журнале останется, кто, когда и почему её удалил,
+            администратор сможет её восстановить.
+          </p>
+          <ConfirmReason
+            label="Удалить заявку"
+            confirmLabel="Да, удалить заявку"
+            small={false}
+            onConfirm={(reason) => record('purchase.delete', { id: pu.id, reason }).then(() => navigate('/purchase'))}
+          />
+        </Section>
+      )}
     </>
   );
 }
@@ -865,10 +980,17 @@ function OrdersTab({ pu, check }) {
 
 // Все загруженные прайсы и сообщения по порядку.
 function ListsTab({ pu, state }) {
+  const admin = isAdmin(useStore((s) => s.user));
   const lists = [...pu.lists].reverse();
   return (
     <Section title={`Загруженные прайсы и цены (${lists.length})`}>
       {!lists.length && <p className="muted">Пока ничего не загружено.</p>}
+      {admin && lists.length > 0 && (
+        <p className="muted small">
+          Ошибочно загруженный прайс можно отменить: его цены перестанут действовать, как будто его не загружали, а запись
+          о загрузке и отмене останется.
+        </p>
+      )}
       <div className="table-scroll">
         <table className="table">
           <thead>
@@ -878,11 +1000,12 @@ function ListsTab({ pu, state }) {
               <th>Откуда</th>
               <th className="num">Цен</th>
               <th>Кто загрузил</th>
+              {admin && <th />}
             </tr>
           </thead>
           <tbody>
             {lists.map((l) => (
-              <tr key={l.id}>
+              <tr key={l.id} className={l.voided ? 'voided-row' : ''}>
                 <td>{dateOnly(l.at)}</td>
                 <td>{state.suppliers[l.supplierId]?.name || '?'}</td>
                 <td>
@@ -894,7 +1017,20 @@ function ListsTab({ pu, state }) {
                 <td className="num">{l.count}</td>
                 <td className="muted small">
                   {l.userName}, {fmtDate(l.createdAt)}
+                  {l.voided && <div className="warn-text">отменён: {deletedText(l.voided)}</div>}
                 </td>
+                {admin && (
+                  <td>
+                    {!l.voided && (
+                      <ConfirmReason
+                        label="Отменить"
+                        confirmLabel="Отменить прайс"
+                        placeholder="Причина, например: не тот файл"
+                        onConfirm={(reason) => record('offer.void', { purchaseId: pu.id, listId: l.id, reason })}
+                      />
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
