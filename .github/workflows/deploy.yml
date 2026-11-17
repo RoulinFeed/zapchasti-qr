@@ -3,8 +3,9 @@
 # Готовый образ передаётся на сервер по SSH, там остаётся только перезапустить контейнер.
 # Нужны секреты репозитория (Settings → Secrets and variables → Actions):
 #   DEPLOY_HOST — адрес сервера, DEPLOY_USER — пользователь, DEPLOY_KEY — закрытый SSH-ключ,
-#   DEPLOY_PATH — папка проекта на сервере (где лежит docker-compose.yml).
-# Пока секретов нет, обновление пропускается.
+#   DEPLOY_PATH — полный путь к папке приложения на сервере, например /home/deploy/zapchasti-qr.
+# Пока секретов нет, обновление пропускается. Новый сервер готовит deploy/setup-server.sh, инструкция в deploy/ПЕРЕЕЗД.md.
+# git на сервере не нужен: docker-compose.yml тоже привозится отсюда.
 name: deploy
 
 on:
@@ -21,12 +22,12 @@ jobs:
       HOST: ${{ secrets.DEPLOY_HOST }}
       USER: ${{ secrets.DEPLOY_USER }}
       KEY: ${{ secrets.DEPLOY_KEY }}
-      DIR: ${{ secrets.DEPLOY_PATH }}
+      DIR: ${{ secrets.DEPLOY_PATH || 'zapchasti-qr' }}
     steps:
       - name: Проверить секреты
         id: check
         run: |
-          if [ -z "$HOST" ] || [ -z "$KEY" ]; then
+          if [ -z "$HOST" ] || [ -z "$KEY" ] || [ -z "$USER" ]; then
             echo "Секреты DEPLOY_* не заданы, обновление пропущено"
             echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
@@ -59,12 +60,18 @@ jobs:
         if: steps.check.outputs.skip != '1'
         run: docker save zapchasti-qr-app:latest | gzip -1 | ssh server 'gunzip | docker load'
 
+      - name: Передать docker-compose.yml
+        if: steps.check.outputs.skip != '1'
+        run: |
+          ssh server "test -s '$DIR/.env' || { echo 'На сервере нет $DIR/.env: сначала запустите deploy/setup-server.sh'; exit 1; }"
+          ssh server "cat > '$DIR/docker-compose.yml'" < docker-compose.yml
+
       - name: Перезапустить приложение
         if: steps.check.outputs.skip != '1'
         run: |
-          ssh server "cd '${DIR:-~/zapchasti-qr}' && git pull --ff-only && docker compose up -d --no-build && docker image prune -f && docker compose ps"
+          ssh server "cd '$DIR' && docker compose up -d --no-build --remove-orphans && docker image prune -f && docker compose ps"
 
       - name: Проверить, что приложение отвечает
         if: steps.check.outputs.skip != '1'
         run: |
-          ssh server "cd '${DIR:-~/zapchasti-qr}' && for i in \$(seq 1 20); do docker compose exec -T app wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 && echo 'Приложение отвечает' && exit 0; sleep 3; done; docker compose logs --tail 50 app; exit 1"
+          ssh server "cd '$DIR' && for i in \$(seq 1 20); do docker compose exec -T app wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 && echo 'Приложение отвечает' && exit 0; sleep 3; done; docker compose logs --tail 50 app; exit 1"
