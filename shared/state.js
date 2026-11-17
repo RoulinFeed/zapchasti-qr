@@ -251,6 +251,9 @@ export function buildState(ops) {
   const state = emptyState();
   // Отмены собираем до разбора журнала, чтобы остатки считались так, будто операции не было.
   for (const op of ops) {
+    if (op.kind === 'offer.void' && !validateOp(op)) {
+      state.voidedLists[op.payload.listId] = { reason: op.payload.reason, userName: op.userName, createdAt: op.createdAt };
+    }
     if (op.kind === 'move.void' && !validateOp(op)) {
       state.voided[op.payload.moveId] = {
         reason: op.payload.reason,

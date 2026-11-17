@@ -1141,3 +1141,17 @@ textarea:focus {
 .pu-stats b {
   color: var(--text);
 }
+
+.confirm-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 420px;
+}
+.confirm-reason .btn.danger {
+  margin-left: 0;
+}
+.table tr.voided-row td:nth-child(-n + 4) {
+  color: var(--muted);
+  text-decoration: line-through;
+}

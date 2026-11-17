@@ -177,3 +177,43 @@ test('закупку ведут кладовщик и руководители, 
     assert.equal(canWrite('mechanic', kind), false);
   }
 });
+
+test('удаление заявки с причиной и восстановление', () => {
+  const ops = [...base(), op('purchase.delete', { id: 'pu', reason: 'тестовая' })];
+  assert.equal(validateOp(op('purchase.delete', { id: 'pu' })), 'укажите причину удаления');
+  let pu = buildState(ops).purchases.pu;
+  assert.equal(pu.deleted.reason, 'тестовая');
+  ops.push(op('purchase.delete', { id: 'pu', restore: true }));
+  pu = buildState(ops).purchases.pu;
+  assert.equal(pu.deleted, null);
+});
+
+test('отменённый прайс не влияет на цены, прежний снова действует', () => {
+  const first = op('offer.list', { purchaseId: 'pu', supplierId: 's-a', full: true, rows: [{ lineId: 'l1', price: 1200 }, { lineId: 'l2', price: 9000 }] });
+  const wrong = op('offer.list', { purchaseId: 'pu', supplierId: 's-a', full: true, rows: [{ lineId: 'l1', price: 12 }] });
+  const ops = [...base(), first, wrong, op('offer.void', { purchaseId: 'pu', listId: wrong.id, reason: 'не тот файл' })];
+  const s = buildState(ops);
+  const pu = s.purchases.pu;
+  assert.equal(pu.offers.l1['s-a'].price, 1200);
+  assert.equal(pu.offers.l2['s-a'].withdrawn, false);
+  assert.equal(pu.lists.length, 2);
+  assert.equal(pu.lists[1].voided.reason, 'не тот файл');
+  assert.equal(validateOp(op('offer.void', { purchaseId: 'pu', listId: 'x' })), 'укажите причину отмены прайса');
+});
+
+test('удалять в закупке может только администратор и руководитель', async () => {
+  const { canWrite } = await import('../src/auth.js');
+  for (const kind of ['purchase.delete', 'offer.void', 'supplier.delete']) {
+    assert.equal(canWrite('owner', kind), true);
+    assert.equal(canWrite('admin', kind), true);
+    assert.equal(canWrite('storekeeper', kind), false);
+    assert.equal(canWrite('mechanic', kind), false);
+  }
+});
+
+test('удалённый поставщик скрыт, но его цены остаются в истории', () => {
+  const ops = [...base(), op('offer.list', { purchaseId: 'pu', supplierId: 's-b', rows: [{ lineId: 'l1', price: 1000 }] }), op('supplier.delete', { id: 's-b' })];
+  const s = buildState(ops);
+  assert.equal(s.suppliers['s-b'].archived, true);
+  assert.equal(s.purchases.pu.offers.l1['s-b'].price, 1000);
+});

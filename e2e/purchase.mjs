@@ -160,4 +160,29 @@ const total = agro.at(-1).at(-1);
 assert.equal(total, 5 * 1100 + 2 * 9400);
 console.log('OK: закупка от заявки до заказов в Excel', sheets.map((s) => `${s.sheet}: ${s.data.at(-1).at(-1)} ₽`).join(', '));
 
+// Администратор отменяет ошибочный прайс: цены Техсервиса перестают действовать.
+await page.getByRole('button', { name: 'Вернуть к сбору цен' }).click();
+await page.getByRole('button', { name: 'Прайсы' }).click();
+const pdfRow = page.locator('.table tbody tr', { hasText: 'tehservis.pdf' });
+await pdfRow.getByRole('button', { name: 'Отменить' }).click();
+await pdfRow.getByPlaceholder(/Причина/).fill('не тот файл');
+await pdfRow.getByRole('button', { name: 'Отменить прайс' }).click();
+await pdfRow.getByText(/отменён: .*«не тот файл»/).waitFor();
+await page.getByRole('button', { name: 'Цены и распределение' }).click();
+await page.getByText(/у «Техсервис» больше нет цены на эту позицию/).waitFor();
+await shot('p5-void');
+
+// Удаление заявки: с причиной, видно в «Удалённых», можно восстановить.
+const title = await page.getByLabel('Название заявки').inputValue();
+await page.getByRole('button', { name: 'Удалить заявку' }).click();
+await page.getByPlaceholder(/Причина/).fill('тестовая');
+await page.getByRole('button', { name: 'Да, удалить заявку' }).click();
+await page.getByText('Удалённые заявки (1)').waitFor();
+await page.getByText(/удалил .*«тестовая»/).waitFor();
+await shot('p6-deleted');
+await page.getByRole('button', { name: 'Восстановить' }).click();
+await page.getByText('Удалённые заявки').waitFor({ state: 'detached' });
+await page.getByText(title).first().waitFor();
+console.log('OK: отмена прайса, удаление и восстановление заявки');
+
 await browser.close();

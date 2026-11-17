@@ -2,7 +2,20 @@
 // Всё хранится операциями в том же журнале, что и движения, поэтому работает без связи
 // и одинаково собирается на сервере и в приложении.
 
-export const PURCHASE_OPS = ['supplier.upsert', 'purchase.upsert', 'purchase.line', 'offer.list', 'alloc.set', 'map.set'];
+export const PURCHASE_OPS = [
+  'supplier.upsert',
+  'purchase.upsert',
+  'purchase.line',
+  'offer.list',
+  'alloc.set',
+  'map.set',
+  // Только администратор и руководитель: удаление заявки, отмена загруженного прайса, удаление поставщика.
+  'purchase.delete',
+  'offer.void',
+  'supplier.delete',
+];
+
+export const PURCHASE_ADMIN_OPS = ['purchase.delete', 'offer.void', 'supplier.delete'];
 
 export const PURCHASE_STATUS = {
   collect: 'Сбор цен',
@@ -25,6 +38,7 @@ export function emptyPurchaseState() {
     suppliers: {}, // id -> { id, name, contact, note }
     purchases: {}, // id -> заявка со строками, предложениями и распределением
     supplierMap: {}, // supplierId -> { ключ их позиции -> itemId }
+    voidedLists: {}, // id прайса -> { reason, userName, createdAt } для отменённых прайсов
   };
 }
 
@@ -64,6 +78,17 @@ export function validatePurchaseOp(op) {
       return null;
     case 'map.set':
       if (!p.supplierId || !p.key) return 'для сопоставления нужны поставщик и позиция';
+      return null;
+    case 'purchase.delete':
+      if (!p.id) return 'не указана заявка';
+      if (!p.restore && !String(p.reason || '').trim()) return 'укажите причину удаления';
+      return null;
+    case 'offer.void':
+      if (!p.purchaseId || !p.listId) return 'не указан прайс';
+      if (!String(p.reason || '').trim()) return 'укажите причину отмены прайса';
+      return null;
+    case 'supplier.delete':
+      if (!p.id) return 'не указан поставщик';
       return null;
   }
   return null;
@@ -111,6 +136,24 @@ export function applyPurchaseOp(state, op) {
     case 'offer.list': {
       const pu = purchase(state, p.purchaseId, op);
       const at = p.receivedAt || op.createdAt;
+      // Отменённый прайс остаётся в списке загрузок, но на цены не влияет.
+      const voided = state.voidedLists?.[op.id];
+      if (voided) {
+        pu.lists.push({
+          id: op.id,
+          supplierId: p.supplierId,
+          at,
+          createdAt: op.createdAt,
+          userName: op.userName,
+          source: p.source || 'manual',
+          fileName: p.fileName || '',
+          full: !!p.full,
+          count: p.rows.filter((r) => !r.remove).length,
+          note: p.note || '',
+          voided,
+        });
+        break;
+      }
       const meta = { at, source: p.source || 'manual', fileName: p.fileName || '', listId: op.id };
       const seen = new Set();
       for (const r of p.rows) {
@@ -151,6 +194,20 @@ export function applyPurchaseOp(state, op) {
         count: p.rows.filter((r) => !r.remove).length,
         note: p.note || '',
       });
+      break;
+    }
+    case 'purchase.delete': {
+      const pu = state.purchases[p.id];
+      if (!pu) break;
+      pu.deleted = p.restore ? null : { reason: p.reason, userName: op.userName, createdAt: op.createdAt };
+      break;
+    }
+    case 'offer.void':
+      // Применяется заранее в buildState: прайс пропускается при разборе журнала.
+      break;
+    case 'supplier.delete': {
+      const sup = state.suppliers[p.id];
+      if (sup) state.suppliers[p.id] = { ...sup, archived: !p.restore };
       break;
     }
     case 'alloc.set': {
@@ -327,7 +384,7 @@ export function purchaseOrders(state, pu) {
 // Поставщики, у которых есть хоть одна цена в заявке, в порядке появления.
 export function purchaseSuppliers(state, pu) {
   const ids = [];
-  for (const l of pu.lists) if (!ids.includes(l.supplierId)) ids.push(l.supplierId);
+  for (const l of pu.lists) if (!l.voided && !ids.includes(l.supplierId)) ids.push(l.supplierId);
   for (const byLine of Object.values(pu.alloc)) for (const s of Object.keys(byLine)) if (!ids.includes(s)) ids.push(s);
   return ids.map((id) => state.suppliers[id] || { id, name: '?' });
 }

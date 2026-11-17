@@ -19,6 +19,8 @@ export function newToken() {
 }
 
 // Кто какие операции может записывать
+// Удалять в закупке могут только администратор и руководитель.
+const PURCHASE_ADMIN = ['purchase.delete', 'offer.void', 'supplier.delete'];
 const PURCHASE = ['supplier.upsert', 'purchase.upsert', 'purchase.line', 'offer.list', 'alloc.set', 'map.set'];
 
 const ALLOWED = {
@@ -32,8 +34,9 @@ const ALLOWED = {
     'item.delete',
     'location.delete',
     ...PURCHASE,
+    ...PURCHASE_ADMIN,
   ],
-  admin: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', ...PURCHASE],
+  admin: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', ...PURCHASE, ...PURCHASE_ADMIN],
   storekeeper: ['item.upsert', 'location.upsert', 'unit.bind', 'move', 'issue.resolve', ...PURCHASE],
   mechanic: ['move'],
 };
