@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Первичная настройка нового сервера для «Складского учёта» и перенос данных со старого.
+# Первичная настройка чистого сервера для «Складского учёта» (база начинается пустой).
 # Запускать от root на чистом Ubuntu 22.04/24.04 или Debian 12:
 #
 #   curl -fsSL https://raw.githubusercontent.com/RoulinFeed/zapchasti-qr/main/deploy/setup-server.sh -o setup.sh
@@ -64,49 +64,13 @@ install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$APP_DIR" "$APP_DIR/backups" "$A
 curl -fsSL "$REPO_RAW/docker-compose.yml" -o "$APP_DIR/docker-compose.yml"
 cd "$APP_DIR"
 
-say "5. Перенос со старого сервера"
-DUMP=""; PHOTOS=""
-echo "Откуда брать данные:"
-echo "  1 — забрать со старого сервера по SSH (он должен быть ещё включён)"
-echo "  2 — из файлов резервной копии, уже загруженных на этот сервер"
-echo "  3 — начать с пустой базы"
-MODE=$(ask "Выбор [1]:" 1)
-case "$MODE" in
-  1)
-    OLD=$(ask "Старый сервер, пользователь@адрес (например root@1.2.3.4):" "")
-    [ -n "$OLD" ] || die "адрес старого сервера не указан"
-    OLD_DIR=$(ask "Папка приложения на старом сервере [~/zapchasti-qr]:" "~/zapchasti-qr")
-    mkdir -p migrate
-    # Одно соединение на все команды, чтобы пароль спросили один раз.
-    SSHO=(-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPath=/tmp/zq-mig-%C -o ControlPersist=120)
-    echo "Подключаюсь к $OLD. Если спросит пароль, это пароль старого сервера."
-    ssh "${SSHO[@]}" "$OLD" "cd $OLD_DIR && cat .env" > migrate/old.env
-    ssh "${SSHO[@]}" "$OLD" "cd $OLD_DIR && docker compose exec -T db pg_dump -U app --no-owner zapchasti | gzip" > migrate/zapchasti.sql.gz
-    ssh "${SSHO[@]}" "$OLD" "cd $OLD_DIR && tar czf - -C data/photos ." > migrate/photos.tar.gz || warn "фото со старого сервера не скопированы"
-    DUMP=migrate/zapchasti.sql.gz; PHOTOS=migrate/photos.tar.gz
-    [ -s .env ] || cp migrate/old.env .env
-    ;;
-  2)
-    DUMP=$(ask "Путь к файлу базы (zapchasti_ГГГГ-ММ-ДД.sql.gz):" "")
-    PHOTOS=$(ask "Путь к архиву фото (photos_ГГГГ-ММ-ДД.tar.gz), Enter если нет:" "")
-    OLDENV=$(ask "Путь к старому .env, Enter если нет:" "")
-    [ -n "$OLDENV" ] && [ ! -s .env ] && cp "$OLDENV" .env
-    ;;
-  3) ;;
-  *) die "непонятный выбор: $MODE" ;;
-esac
-if [ -n "$DUMP" ]; then
-  [ -s "$DUMP" ] || die "файл базы $DUMP пуст или не найден"
-  gzip -t "$DUMP" || die "файл базы $DUMP повреждён"
-  gunzip -c "$DUMP" | grep -q 'CREATE TABLE' || die "в $DUMP нет таблиц: похоже, дамп не снялся"
-fi
-
-say "6. Настройки (.env)"
+say "5. Настройки (.env)"
 if [ ! -s .env ]; then
   DOMAIN=$(ask "Домен сайта [5-182-87-217.sslip.io]:" "5-182-87-217.sslip.io")
   ALOGIN=$(ask "Логин администратора [ruslan]:" "ruslan")
   ANAME=$(ask "Имя администратора [Руслан]:" "Руслан")
-  APIN=$(ask "PIN администратора (только для пустой базы):" "")
+  APIN=$(ask "PIN администратора (4+ цифр, им вы войдёте в приложение):" "")
+  [ ${#APIN} -ge 4 ] || die "PIN должен быть не короче 4 символов"
   cat > .env <<ENV
 DOMAIN=$DOMAIN
 DB_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')
@@ -119,23 +83,11 @@ else
 fi
 chmod 600 .env
 
-say "7. База данных"
+say "6. База данных"
 docker compose up -d db
 for i in $(seq 1 30); do docker compose exec -T db pg_isready -U app -d zapchasti >/dev/null 2>&1 && break; sleep 2; done
 docker compose exec -T db pg_isready -U app -d zapchasti >/dev/null || die "база не запустилась: docker compose logs db"
-if [ -n "$DUMP" ]; then
-  TABLES=$(docker compose exec -T db psql -U app -d zapchasti -tAc "select count(*) from information_schema.tables where table_schema='public'")
-  if [ "$TABLES" != "0" ]; then
-    warn "в базе уже есть таблицы, загрузку пропускаю (чтобы не задвоить данные)"
-  else
-    gunzip -c "$DUMP" | docker compose exec -T db psql -q -v ON_ERROR_STOP=1 -U app -d zapchasti >/dev/null
-    echo "База загружена. Записей в журнале операций:"
-    docker compose exec -T db psql -U app -d zapchasti -tAc "select count(*) from ops" || true
-  fi
-fi
-if [ -n "$PHOTOS" ] && [ -s "$PHOTOS" ]; then
-  tar xzf "$PHOTOS" -C data/photos && echo "Фото: $(ls data/photos | wc -l) файлов"
-fi
+echo "База запущена. Таблицы и администратора приложение создаст само при первом запуске."
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_DIR"
 
 say "Готово"
@@ -143,6 +95,7 @@ cat <<TXT
 Сервер подготовлен. Дальше:
   1. На GitHub поменять секреты: DEPLOY_HOST=$(curl -fsS4 --max-time 5 https://ifconfig.me 2>/dev/null || echo 5.182.87.217),
      DEPLOY_USER=$DEPLOY_USER, DEPLOY_PATH=$APP_DIR, DEPLOY_KEY = закрытая половина вставленного ключа.
+     Секреты из .env (пароль базы) на GitHub не нужны: они остаются только на этом сервере.
   2. Направить домен $(grep '^DOMAIN=' .env | cut -d= -f2) на этот IP (для *.sslip.io ничего делать не нужно).
   3. На GitHub: Actions → deploy → Run workflow. Он привезёт приложение и запустит его.
 TXT

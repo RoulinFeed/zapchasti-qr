@@ -4,7 +4,7 @@
 # Нужны секреты репозитория (Settings → Secrets and variables → Actions):
 #   DEPLOY_HOST — адрес сервера, DEPLOY_USER — пользователь, DEPLOY_KEY — закрытый SSH-ключ,
 #   DEPLOY_PATH — полный путь к папке приложения на сервере, например /home/deploy/zapchasti-qr.
-# Пока секретов нет, обновление пропускается. Новый сервер готовит deploy/setup-server.sh, инструкция в deploy/ПЕРЕЕЗД.md.
+# Пока секретов нет, обновление пропускается. Сервер готовит deploy/setup-server.sh, инструкция в deploy/НАСТРОЙКА-СЕРВЕРА.md.
 # git на сервере не нужен: docker-compose.yml тоже привозится отсюда.
 name: deploy
 
