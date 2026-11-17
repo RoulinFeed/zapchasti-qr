@@ -38,6 +38,10 @@ import {
   Wrench,
   ScrollText,
   ShoppingCart,
+  ArrowLeftRight,
+  Tractor,
+  PackageMinus,
+  Trash2,
 } from 'lucide-react';
 
 const ROUTES = {
@@ -103,24 +107,55 @@ export default function App() {
   const Screen = ROUTES[route.name] || Home;
   const manage = canManage(user);
   const issues = manage ? openIssues(state).length : 0;
-  // [путь, подпись, иконка, счётчик]
-  const links = [
-    ['', 'Главная', House],
-    ['scan', 'Найти по QR', QrCode],
-    ['stock', 'Остатки', Boxes],
-    ['journal', 'Журнал движений', ScrollText],
-    manage && ['purchase', 'Закупка', ShoppingCart],
-    manage && ['receive', 'Приход', PackagePlus],
-    manage && ['inventory', 'Инвентаризация', ClipboardCheck],
-    manage && ['issues', 'Нестыковки', TriangleAlert, issues],
-    manage && ['costs', 'Затраты', Wallet],
-    manage && ['catalog', 'Каталог', BookOpen],
-    manage && ['locations', 'Склады, Газели, техника', Warehouse],
-    manage && ['labels', 'Печать этикеток', Printer],
-    isAdmin(user) && ['users', 'Сотрудники', UsersIcon],
-    ['data', 'Выгрузка в Excel', FileSpreadsheet],
-    rejected.length > 0 && ['problems', 'Ошибки', CircleAlert, rejected.length],
-  ].filter(Boolean);
+  const admin = isAdmin(user);
+  // Меню разбито на группы по задачам. Механик видит только первую группу и отчёты,
+  // кладовщик и руководитель — ещё склад, закупку и справочники.
+  // Пункт: [путь, подпись, иконка, счётчик]
+  const groups = [
+    {
+      title: 'Работа с деталями',
+      links: [
+        ['', 'Главная', House],
+        ['scan', 'Найти по QR', QrCode],
+        ['move/transfer', 'Переместить / выдать', ArrowLeftRight],
+        ['move/install', 'Поставить на технику', Tractor],
+        ['move/remove', 'Снять с техники', PackageMinus],
+        ['stock', 'Остатки', Boxes],
+        ['journal', 'Журнал движений', ScrollText],
+        rejected.length > 0 && ['problems', 'Ошибки отправки', CircleAlert, rejected.length],
+      ],
+    },
+    {
+      title: 'Склад',
+      links: [
+        manage && ['receive', 'Приход', PackagePlus],
+        manage && ['inventory', 'Инвентаризация', ClipboardCheck],
+        manage && ['issues', 'Нестыковки', TriangleAlert, issues],
+        manage && ['move/writeoff', 'Списать', Trash2],
+        manage && ['labels', 'Печать этикеток', Printer],
+      ],
+    },
+    {
+      title: 'Закупка и затраты',
+      links: [
+        manage && ['purchase', 'Закупка', ShoppingCart],
+        manage && ['costs', 'Затраты', Wallet],
+      ],
+    },
+    {
+      title: 'Справочники и отчёты',
+      links: [
+        manage && ['catalog', 'Каталог', BookOpen],
+        manage && ['locations', 'Склады, Газели, техника', Warehouse],
+        admin && ['users', 'Сотрудники', UsersIcon],
+        ['data', 'Выгрузка в Excel', FileSpreadsheet],
+      ],
+    },
+  ]
+    .map((g) => ({ ...g, links: g.links.filter(Boolean) }))
+    .filter((g) => g.links.length > 0);
+  // Экран «Движение» один на несколько пунктов, поэтому сравниваем и с подтипом.
+  const current = [route.name, route.name === 'move' ? route.args[0] || 'transfer' : null].filter(Boolean).join('/');
 
   return (
     <div className="app">
@@ -131,12 +166,19 @@ export default function App() {
           </span>
           <span className="label">Запчасти</span>
         </a>
-        {links.map(([path, label, Icon, count]) => (
-          <a key={path} href={`#/${path}`} className={route.name === path ? 'active' : ''} title={label}>
-            <Icon size={20} strokeWidth={1.8} />
-            <span className="label">{label}</span>
-            {count > 0 && <span className="count">{count}</span>}
-          </a>
+        {groups.map((g) => (
+          <div key={g.title} className="side-group">
+            <div className="side-title" aria-hidden="true">
+              <span className="label">{g.title}</span>
+            </div>
+            {g.links.map(([path, label, Icon, count]) => (
+              <a key={path} href={`#/${path}`} className={current === path ? 'active' : ''} title={label}>
+                <Icon size={20} strokeWidth={1.8} />
+                <span className="label">{label}</span>
+                {count > 0 && <span className="count">{count}</span>}
+              </a>
+            ))}
+          </div>
         ))}
         <div className="side-user">
           <ThemeSwitch />
